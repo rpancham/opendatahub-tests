@@ -17,6 +17,7 @@ class TestInferenceGraphDeployment:
             inference_service=dog_breed_inference_graph,
             inference_config=ONNX_INFERENCE_CONFIG,
             inference_type=Inference.GRAPH,
+            model_name="dog-breed-classifier",
             protocol=Protocols.HTTPS,
             use_default_query=True,
         )

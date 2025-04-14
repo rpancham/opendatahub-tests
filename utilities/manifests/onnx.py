@@ -19,7 +19,7 @@ ONNX_INFERENCE_CONFIG = {
             },
             "graph": {
                 "query_input": "@utilities/manifests/openvino/dog-input-tensor.json",
-                "query_output": r'{"model_name":"dog-breed-classifier","model_version":"1","outputs":\[{"name":"495","shape":\[1,133\],"datatype":"FP32","data":\[.*\]}\]}',
+                "query_output": r'{"model_name":"$model_name","model_version":"1","outputs":\[{"name":"495","shape":\[1,133\],"datatype":"FP32","data":\[.*\]}\]}',
                 "use_regex": True
             }
         },

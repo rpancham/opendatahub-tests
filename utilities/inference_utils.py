@@ -75,6 +75,9 @@ class Inference:
         if isinstance(self.inference_service, InferenceService):
             return self.inference_service.instance.status.deploymentMode
 
+        if isinstance(self.inference_service, InferenceGraph):
+            return KServeDeploymentType.SERVERLESS
+
         return KServeDeploymentType.SERVERLESS
 
     def get_inference_url(self) -> str:

@@ -7,9 +7,10 @@ from kubernetes.dynamic import DynamicClient
 from ocp_resources.inference_graph import InferenceGraph
 from ocp_resources.inference_service import InferenceService
 from ocp_resources.namespace import Namespace
+from ocp_resources.secret import Secret
 from ocp_resources.serving_runtime import ServingRuntime
 
-from utilities.constants import ModelFormat, KServeDeploymentType
+from utilities.constants import ModelFormat, KServeDeploymentType, ModelStoragePath
 from utilities.inference_utils import create_isvc
 
 
@@ -51,13 +52,15 @@ def dog_cat_inference_service(
     admin_client: DynamicClient,
     model_namespace: Namespace,
     ovms_kserve_serving_runtime: ServingRuntime,
+    models_endpoint_s3_secret: Secret,
 ) -> Generator[InferenceService, Any, Any]:
     with create_isvc(
         client=admin_client,
         name="dog-cat-classifier",
         namespace=model_namespace.name,
         runtime=ovms_kserve_serving_runtime.name,
-        storage_uri="oci://quay.io/edgarhz/oci-model-images:dog-cat-classifier-202504051400",
+        storage_key=models_endpoint_s3_secret.name,
+        storage_path=ModelStoragePath.CAT_DOG_ONNX,
         model_format=ModelFormat.ONNX,
         deployment_mode=KServeDeploymentType.SERVERLESS,
         protocol_version="v2",
@@ -71,13 +74,15 @@ def dog_breed_inference_service(
     admin_client: DynamicClient,
     model_namespace: Namespace,
     ovms_kserve_serving_runtime: ServingRuntime,
+    models_endpoint_s3_secret: Secret,
 ) -> Generator[InferenceService, Any, Any]:
     with create_isvc(
         client=admin_client,
         name="dog-breed-classifier",
         namespace=model_namespace.name,
         runtime=ovms_kserve_serving_runtime.name,
-        storage_uri="oci://quay.io/edgarhz/oci-model-images:dog-breed-classifier-202504051400",
+        storage_key=models_endpoint_s3_secret.name,
+        storage_path=ModelStoragePath.DOG_BREED_ONNX,
         model_format=ModelFormat.ONNX,
         deployment_mode=KServeDeploymentType.SERVERLESS,
         protocol_version="v2",

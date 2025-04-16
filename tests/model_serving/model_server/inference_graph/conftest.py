@@ -1,4 +1,3 @@
-import time
 from typing import Generator, Any
 
 import pytest

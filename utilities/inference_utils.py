@@ -402,7 +402,7 @@ class UserInference(Inference):
         except JSONDecodeError:
             return {"output": out}
 
-    @retry(wait_timeout=Timeout.TIMEOUT_30SEC, sleep=5, exceptions_dict={AssertionError:[]})
+    @retry(wait_timeout=Timeout.TIMEOUT_30SEC, sleep=5, exceptions_dict={AssertionError: []})
     def run_inference(self, cmd: str) -> str:
         """
         Run inference command

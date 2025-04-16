@@ -402,7 +402,7 @@ class UserInference(Inference):
         except JSONDecodeError:
             return {"output": out}
 
-    @retry(wait_timeout=Timeout.TIMEOUT_30SEC, sleep=5)
+    @retry(wait_timeout=Timeout.TIMEOUT_30SEC, sleep=5, exceptions_dict={AssertionError:[]})
     def run_inference(self, cmd: str) -> str:
         """
         Run inference command
@@ -437,6 +437,9 @@ class UserInference(Inference):
 
         else:
             res, out, err = run_command(command=shlex.split(cmd), verify_stderr=False, check=False)
+            if res and "http/1.0 503 service unavailable" in out.lower():
+                LOGGER.info(f"The Route for {self.get_inference_url()} is not ready yet (503 error)")
+                raise AssertionError("The Route is not ready yet")
 
         if not res:
             raise ValueError(f"Inference failed with error: {err}\nOutput: {out}\nCommand: {cmd}")

@@ -42,7 +42,6 @@ def dog_breed_inference_graph(
         nodes=nodes,
     ) as inference_graph:
         inference_graph.wait_for_condition(condition=inference_graph.Condition.READY, status="True")
-        time.sleep(5)  # This wait helps OpenShift to fully enable the Route, if the InferenceGraph is exposed
         yield inference_graph
 
 

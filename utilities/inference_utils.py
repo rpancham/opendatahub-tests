@@ -408,7 +408,6 @@ class UserInference(Inference):
     @retry(
         wait_timeout=Timeout.TIMEOUT_30SEC,
         sleep=5,
-        exceptions_dict={AssertionError: []},
     )
     def run_inference(self, cmd: str) -> str:
         """

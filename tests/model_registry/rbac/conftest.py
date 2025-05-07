@@ -22,9 +22,9 @@ DEFAULT_TOKEN_DURATION = "10m"
 def sa_namespace(request: pytest.FixtureRequest, admin_client: DynamicClient) -> Generator[Namespace, None, None]:
     """
     Creates a temporary Kubernetes namespace for the duration of a test.
-    
+
     A unique namespace is generated based on the test file path, created using a context manager, and waited on until it reaches ACTIVE status. The namespace is automatically deleted after the test completes.
-    
+
     Yields:
         Namespace: The created and ready Kubernetes namespace object.
     """
@@ -40,7 +40,7 @@ def sa_namespace(request: pytest.FixtureRequest, admin_client: DynamicClient) ->
 def service_account(admin_client: DynamicClient, sa_namespace: Namespace) -> Generator[ServiceAccount, None, None]:
     """
     Creates a temporary ServiceAccount in the provided namespace for the duration of a test.
-    
+
     The ServiceAccount is created with a unique name and is automatically deleted after the test completes.
     """
     sa_name = generate_random_name(prefix="mr-test-user")
@@ -53,7 +53,7 @@ def service_account(admin_client: DynamicClient, sa_namespace: Namespace) -> Gen
 def sa_token(service_account: ServiceAccount) -> str:
     """
     Retrieves a short-lived authentication token for the specified ServiceAccount.
-    
+
     Executes the 'oc create token' command to generate a temporary token for the given ServiceAccount, returning the token string. Raises an exception if the command fails, times out, or returns an empty token.
     """
     sa_name = service_account.name
@@ -106,9 +106,9 @@ def mr_access_role(
 ) -> Generator[Role, None, None]:
     """
     Creates a Kubernetes Role in the model registry namespace granting 'get' access to a specific service.
-    
+
     The Role is named using the model registry instance and the temporary namespace, and is labeled for test identification. It is created and cleaned up automatically using a context manager.
-    
+
     Yields:
         The created Role object.
     """
@@ -151,9 +151,9 @@ def mr_access_role_binding(
 ) -> Generator[RoleBinding, None, None]:
     """
     Creates a RoleBinding in the model registry namespace that binds the specified Role to all service accounts in a given namespace.
-    
+
     The RoleBinding links the provided Role to the group 'system:serviceaccounts:<namespace>', enabling RBAC access for all service accounts in the temporary namespace. The resource is labeled for test identification and is automatically cleaned up after use.
-    
+
     Yields:
         The created RoleBinding object.
     """

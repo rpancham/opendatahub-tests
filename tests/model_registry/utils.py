@@ -202,8 +202,9 @@ def wait_for_pods_running(
     number_of_consecutive_checks: int = 1,
 ) -> bool | None:
     """
-    Waits for all pods in a given namespace to reach Running/Completed state. To avoid catching all pods in running
-    state too soon, use number_of_consecutive_checks with appropriate values.
+    Waits for all pods in a namespace to reach Running or Completed state.
+    
+    Performs repeated checks until all pods are running or completed for a specified number of consecutive checks. Returns True if the condition is met within the timeout period; otherwise, returns None. Raises TimeoutExpiredError if the timeout is reached and some pods are still not running.
     """
     samples = TimeoutSampler(
         wait_timeout=180,
@@ -234,21 +235,17 @@ def wait_for_pods_running(
 
 def generate_random_name(prefix: str, length: int = 8) -> str:
     """
-    Generates a name with a required prefix and a random suffix derived from a UUID.
-
-    The length of the random suffix can be controlled, defaulting to 8 characters.
-    The suffix is taken from the beginning of a V4 UUID's hex representation.
-
+    Generates a random name by combining a required prefix with a UUID-derived suffix.
+    
+    The suffix consists of the first `length` characters from a UUID4 hex string. Raises
+    ValueError if the prefix is empty or if length is not an integer between 1 and 32.
+    
     Args:
-        prefix (str): The required prefix for the generated name.
-        ength (int, optional): The desired length for the UUID-derived suffix.
-                               Defaults to 8. Must be between 1 and 32.
-
+        prefix: The prefix to use for the generated name.
+        length: Number of characters to use from the UUID hex string (default is 8).
+    
     Returns:
-        str: A string in the format "prefix-uuid_suffix".
-
-    Raises:
-        ValueError: If prefix is empty, or if length is not between 1 and 32.
+        A string in the format "prefix-suffix", where the suffix is random.
     """
     if not prefix:
         raise ValueError("Prefix cannot be empty or None.")
@@ -263,4 +260,15 @@ def generate_random_name(prefix: str, length: int = 8) -> str:
 
 
 def generate_namespace_name(file_path: str) -> str:
+    """
+    Generates a Kubernetes namespace name from a file path.
+    
+    Transforms the file path by removing the ".py" suffix, replacing slashes and underscores with hyphens, truncating to the last 63 characters, and returning the portion after the first hyphen.
+    
+    Args:
+        file_path: The file path to convert into a namespace name.
+    
+    Returns:
+        A string suitable for use as a Kubernetes namespace name.
+    """
     return (file_path.removesuffix(".py").replace("/", "-").replace("_", "-"))[-63:].split("-", 1)[-1]

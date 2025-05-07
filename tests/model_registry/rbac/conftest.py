@@ -21,8 +21,12 @@ DEFAULT_TOKEN_DURATION = "10m"
 @pytest.fixture(scope="function")
 def sa_namespace(request: pytest.FixtureRequest, admin_client: DynamicClient) -> Generator[Namespace, None, None]:
     """
-    Creates a temporary namespace using a context manager for automatic cleanup.
-    Function scope ensures a fresh namespace for each test needing it.
+    Creates a temporary Kubernetes namespace for the duration of a test.
+    
+    A unique namespace is generated based on the test file path, created using a context manager, and waited on until it reaches ACTIVE status. The namespace is automatically deleted after the test completes.
+    
+    Yields:
+        Namespace: The created and ready Kubernetes namespace object.
     """
     test_file = os.path.relpath(request.fspath.strpath, start=os.path.dirname(__file__))
     ns_name = generate_namespace_name(file_path=test_file)
@@ -35,8 +39,9 @@ def sa_namespace(request: pytest.FixtureRequest, admin_client: DynamicClient) ->
 @pytest.fixture(scope="function")
 def service_account(admin_client: DynamicClient, sa_namespace: Namespace) -> Generator[ServiceAccount, None, None]:
     """
-    Creates a ServiceAccount within the temporary namespace using a context manager.
-    Function scope ensures it's tied to the lifetime of sa_namespace for that test.
+    Creates a temporary ServiceAccount in the provided namespace for the duration of a test.
+    
+    The ServiceAccount is created with a unique name and is automatically deleted after the test completes.
     """
     sa_name = generate_random_name(prefix="mr-test-user")
     LOGGER.info(f"Creating ServiceAccount: {sa_name} in namespace {sa_namespace.name}")
@@ -47,8 +52,9 @@ def service_account(admin_client: DynamicClient, sa_namespace: Namespace) -> Gen
 @pytest.fixture(scope="function")
 def sa_token(service_account: ServiceAccount) -> str:
     """
-    Retrieves a short-lived token for the ServiceAccount using 'oc create token'.
-    Function scope because token is temporary and tied to the SA for that test.
+    Retrieves a short-lived authentication token for the specified ServiceAccount.
+    
+    Executes the 'oc create token' command to generate a temporary token for the given ServiceAccount, returning the token string. Raises an exception if the command fails, times out, or returns an empty token.
     """
     sa_name = service_account.name
     namespace = service_account.namespace
@@ -99,7 +105,12 @@ def mr_access_role(
     sa_namespace: Namespace,
 ) -> Generator[Role, None, None]:
     """
-    Creates the MR Access Role using direct constructor parameters and a context manager.
+    Creates a Kubernetes Role in the model registry namespace granting 'get' access to a specific service.
+    
+    The Role is named using the model registry instance and the temporary namespace, and is labeled for test identification. It is created and cleaned up automatically using a context manager.
+    
+    Yields:
+        The created Role object.
     """
     role_name = f"registry-user-{MR_INSTANCE_NAME}-{sa_namespace.name[:8]}"
     LOGGER.info(f"Defining Role: {role_name} in namespace {model_registry_namespace}")
@@ -139,7 +150,12 @@ def mr_access_role_binding(
     sa_namespace: Namespace,
 ) -> Generator[RoleBinding, None, None]:
     """
-    Creates the MR Access RoleBinding using direct constructor parameters and a context manager.
+    Creates a RoleBinding in the model registry namespace that binds the specified Role to all service accounts in a given namespace.
+    
+    The RoleBinding links the provided Role to the group 'system:serviceaccounts:<namespace>', enabling RBAC access for all service accounts in the temporary namespace. The resource is labeled for test identification and is automatically cleaned up after use.
+    
+    Yields:
+        The created RoleBinding object.
     """
     binding_name = f"{mr_access_role.name}-binding"
 

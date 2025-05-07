@@ -12,7 +12,17 @@ LOGGER = get_logger(name=__name__)
 
 
 def build_mr_client_args(rest_endpoint: str, token: str, author: str) -> Dict[str, Any]:
-    """Builds arguments for ModelRegistryClient based on REST endpoint and token."""
+    """
+    Constructs a dictionary of connection arguments for ModelRegistryClient from a REST endpoint, token, and author.
+    
+    Args:
+        rest_endpoint: The REST endpoint in the format "host:port".
+        token: The authentication token for the user or service account.
+        author: The identifier for the request author.
+    
+    Returns:
+        A dictionary containing server address, port, user token, security flag, and author metadata for ModelRegistryClient initialization.
+    """
     server, port = rest_endpoint.split(":")
     return {
         "server_address": f"{Protocols.HTTPS}://{server}",
@@ -55,8 +65,13 @@ class TestModelRegistryRBAC:
         model_registry_instance_rest_endpoint: str,
     ):
         """
-        Verifies SA access is DENIED (403 Forbidden) by default via REST.
-        Does NOT use mr_access_role or mr_access_role_binding fixtures.
+        Tests that a ServiceAccount without RBAC roles is denied access (HTTP 403) to the Model Registry REST endpoint.
+        
+        Args:
+            sa_token: The ServiceAccount token used for authentication.
+            model_registry_instance_rest_endpoint: The REST endpoint URL of the Model Registry.
+        
+        Asserts that attempting to instantiate the ModelRegistry client with the given token raises a ForbiddenException with a 403 status code.
         """
         LOGGER.info("--- Starting RBAC Test: Access Denied ---")
         LOGGER.info(f"Targeting Model Registry REST endpoint: {model_registry_instance_rest_endpoint}")
@@ -87,7 +102,9 @@ class TestModelRegistryRBAC:
         model_registry_instance_rest_endpoint: str,
     ):
         """
-        Verifies SA access is GRANTED via REST after applying Role and RoleBinding fixtures.
+        Tests that a ServiceAccount can access the Model Registry REST endpoint after RBAC Role and RoleBinding are applied.
+        
+        Asserts that the ModelRegistry client is successfully instantiated using the ServiceAccount token, indicating access is granted.
         """
         LOGGER.info("--- Starting RBAC Test: Access Granted ---")
         LOGGER.info(f"Targeting Model Registry REST endpoint: {model_registry_instance_rest_endpoint}")

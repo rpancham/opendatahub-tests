@@ -61,9 +61,15 @@ objects:
           name: triton
           priority: 1
           version: "2"
+        - autoSelect: true
+          name: xgboost
+          version: "1"
+        - autoSelect: true
+          name: python
+          version: "1"
+    name: shm
     volumes:
       - emptyDir: null
         medium: Memory
         sizeLimit: 2Gi
         name: shm
- 

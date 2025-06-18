@@ -1,67 +1,80 @@
-# from typing import Union
+import os
+import json
+from typing import Any, Union
 
-# # from utilities.constants import RuntimeTemplates
-# # from utilities.constants import Protocols
+from utilities.constants import (
+    KServeDeploymentType,
+    Protocols,
+    RuntimeTemplates,
+)
 
-# from utilities.constants import RuntimeTemplates, Protocols
+from pathlib import Path
 
-# TEMPLATE_FILE: dict[str, str] = {
-#     Protocols.REST: "triton_rest_serving_template.yaml",
-#     Protocols.GRPC: "triton_grpc_serving_template.yaml",
-# }
+TRITON_REST_INPUT_PATH = (
+    "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-rest-input.json"
+)
+TRITON_GRPC_INPUT_PATH =(
+    "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-gRPC-input.json"
+)
+def load_json(path: str) -> dict:
+    with open(path, "r") as f:
+        return json.load(f)
 
-# TEMPLATE_MAP: dict[str, str] = {
-#     Protocols.REST: RuntimeTemplates.TRITON_REST,
-#     Protocols.GRPC: RuntimeTemplates.TRITON_GRPC,
-# }
+TRITON_REST_INPUT_QUERY = load_json(TRITON_REST_INPUT_PATH)
 
-# PREDICT_RESOURCES: dict[str, Union[list[dict[str, Union[str, dict[str, str]]]], dict[str, dict[str, str]]]] = {
-#     "volumes": [
-#         {"name": "shared-memory", "emptyDir": {"medium": "Memory", "sizeLimit": "16Gi"}},
-#         {"name": "tmp", "emptyDir": {}},
-#         {"name": "home", "emptyDir": {}},
-#     ],
-#     "volume_mounts": [
-#         {"name": "shared-memory", "mountPath": "/dev/shm"},
-#         {"name": "tmp", "mountPath": "/tmp"},
-#         {"name": "home", "mountPath": "/home/vllm"},
-#     ],
-#     "resources": {"requests": {"cpu": "2", "memory": "15Gi"}, "limits": {"cpu": "3", "memory": "16Gi"}},
-# }
+TRITON_GRPC_INPUT_QUERY = load_json(TRITON_GRPC_INPUT_PATH)
 
 
-from typing import Union
+LOCAL_HOST_URL: str = "http://localhost"
 
-class Protocols:
-    REST = "rest"
-    GRPC = "grpc"
+TRITON_REST_PORT: int = 8080
 
-# Define template files
-TEMPLATE_FILE: dict[str, str] = {
-    Protocols.REST: "triton_onnx_rest_servingruntime.yaml",
-    Protocols.GRPC: "triton_grpc_serving_template.yaml",
+TRITON_GRPC_PORT: int = 9000
+
+TRITON_GRPC_REMOTE_PORT: int = 443
+
+MODEL_PATH_PREFIX: str = "triton_resnet/model_repository"
+
+PROTO_FILE_PATH: str = "utilities/manifests/common/grpc_predict_v2.proto"
+
+BASE_DIR = os.path.dirname(__file__)
+TEMPLATE_FILE_PATH: dict[str, str] = {
+    Protocols.REST: os.path.join(BASE_DIR,"basic_model_deployment","triton_rest_serving_template.yaml"),
+    Protocols.GRPC: os.path.join(BASE_DIR,"basic_model_deployment","triton_grpc_serving_template.yaml"),
 }
 
-# Template mapping
 TEMPLATE_MAP: dict[str, str] = {
-    Protocols.REST: "triton-rest",
-    Protocols.GRPC: "triton-grpc",
+    Protocols.REST: RuntimeTemplates.TRITON_REST,
+    Protocols.GRPC: RuntimeTemplates.TRITON_GRPC,
 }
 
-# Resource definitions
+RUNTIME_MAP: dict[str, str] = {
+    Protocols.REST: "triton-kserve-rest",
+    Protocols.GRPC: "triton-grpc-runtime",
+}
+
 PREDICT_RESOURCES: dict[str, Union[list[dict[str, Union[str, dict[str, str]]]], dict[str, dict[str, str]]]] = {
     "volumes": [
-        {"name": "shared-memory", "emptyDir": {"medium": "Memory", "sizeLimit": "16Gi"}},
+        {"name": "shared-memory", "emptyDir": {"medium": "Memory", "sizeLimit": "2Gi"}},
         {"name": "tmp", "emptyDir": {}},
         {"name": "home", "emptyDir": {}},
     ],
     "volume_mounts": [
         {"name": "shared-memory", "mountPath": "/dev/shm"},
         {"name": "tmp", "mountPath": "/tmp"},
-        {"name": "home", "mountPath": "/home/triton"},
+        {"name": "home", "mountPath": "/home/mlserver"},
     ],
-    "resources": {
-        "requests": {"cpu": "2", "memory": "15Gi"},
-        "limits": {"cpu": "3", "memory": "16Gi"}
-    },
+    "resources": {"requests": {"cpu": "1", "memory": "2Gi"}, "limits": {"cpu": "2", "memory": "4Gi"}},
+}
+
+BASE_RAW_DEPLOYMENT_CONFIG: dict[str, Any] = {
+    "deployment_type": KServeDeploymentType.RAW_DEPLOYMENT,
+    "min-replicas": 1,
+    "enable_external_route": False,
+}
+
+BASE_SERVERLESS_DEPLOYMENT_CONFIG: dict[str, Any] = {
+    "deployment_type": KServeDeploymentType.SERVERLESS,
+    "min-replicas": 1,
+    "enable_external_route": True,
 }

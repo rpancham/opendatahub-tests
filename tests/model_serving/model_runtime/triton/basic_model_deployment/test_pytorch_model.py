@@ -1,368 +1,118 @@
-# # tests/model_serving/model_runtime/triton/basic_model_deployment/test_pytorch_model.py
+"""
+Test module for ResNet50 TensorFlow model served by Triton via KServe.
 
-# import json
-# import logging
-# import pytest
-# import requests
-# from typing import Dict, Any
-# from time import sleep
-# from simple_logger.logger import get_logger
+Validates inference using REST and gRPC protocols with both raw and serverless deployment modes.
+"""
 
-# from tests.model_serving.model_runtime.triton.constant import TEMPLATE_MAP, PREDICT_RESOURCES
-# from utilities.constants import KServeDeploymentType, Protocols
+from typing import Any
 
-# LOGGER = get_logger(name=__name__)
-
-
-# @pytest.mark.tier2
-# @pytest.mark.parametrize("deprecated", [True], ids=["RHOAIENG-11561"])
-# class TestPyTorchModelInference:
-#     @pytest.fixture(scope="class")
-#     def pytorch_model_data(self):
-#         """Load PyTorch model test data"""
-#         # These paths should be defined in your constants or fixtures
-#         input_path = "tests/model_serving/model_runtime/triton/test_data/pytorch_input.json"
-#         expected_path = "tests/model_serving/model_runtime/triton/test_data/pytorch_expected_output.json"
-        
-#         with open(input_path) as f:
-#             input_data = json.load(f)
-        
-#         with open(expected_path) as f:
-#             expected_output = json.load(f)
-        
-#         return {
-#             "input": input_data,
-#             "expected_output": expected_output
-#         }
-
-#     @pytest.fixture(scope="class")
-#     def triton_inference_service_kwargs(self):
-#         """Configuration for the PyTorch InferenceService"""
-#         return {
-#             "name": "pytorch-model",
-#             "deployment_type": KServeDeploymentType.SERVERLESS,
-#             "deployment_mode": KServeDeploymentType.SERVERLESS,
-#             "gpu_count": 1,
-#             "runtime_argument": ["--model-repository=/mnt/models"],
-#             "min-replicas": 1
-#         }
-
-#     def test_pytorch_model_rest_inference(
-#         self,
-#         triton_inference_service,
-#         pytorch_model_data,
-#         response_snapshot,
-#         request
-#     ):
-#         """
-#         Test PyTorch model inference via Triton on KServe using REST API
-#         """
-#         LOGGER.info(f"Running test: {request.node.name}")
-        
-#         # 1. Verify inference service is ready
-#         assert triton_inference_service.instance.is_ready(), "InferenceService is not ready"
-        
-#         # 2. Get inference URL
-#         inference_url = self._get_inference_url(triton_inference_service)
-#         LOGGER.info(f"Inference URL: {inference_url}")
-        
-#         # 3. Verify inference
-#         self._verify_inference(
-#             inference_url,
-#             pytorch_model_data["input"],
-#             pytorch_model_data["expected_output"],
-#             response_snapshot
-#         )
-
-#     def _get_inference_url(self, inference_service) -> str:
-#         """Construct the inference URL from the InferenceService status"""
-#         if not inference_service.instance.status.get("url"):
-#             pytest.fail("InferenceService does not have a URL in status")
-        
-#         # Use REST protocol endpoint
-#         return f"{inference_service.instance.status['url']}/v2/models/pytorch-model/infer"
-
-#     def _verify_inference(
-#         self,
-#         inference_url: str,
-#         input_data: Dict,
-#         expected_output: Dict,
-#         snapshot,
-#         max_retries: int = 5,
-#         retry_delay: int = 5
-#     ) -> None:
-#         """
-#         Verify model inference with retries
-#         """
-#         for attempt in range(max_retries):
-#             try:
-#                 response = requests.post(
-#                     inference_url,
-#                     json=input_data,
-#                     headers={"Content-Type": "application/json"},
-#                     timeout=30
-#                 )
-#                 response.raise_for_status()
-                
-#                 actual_output = response.json()
-                
-#                 # Verify against expected output
-#                 assert actual_output == expected_output, \
-#                     f"Inference output mismatch. Expected: {expected_output}, Actual: {actual_output}"
-                
-#                 # Verify against snapshot if needed
-#                 snapshot.assert_match(actual_output)
-                
-#                 LOGGER.info("Inference verification successful")
-#                 return
-            
-#             except (AssertionError, requests.RequestException) as e:
-#                 if attempt == max_retries - 1:
-#                     LOGGER.error(f"Final attempt failed: {e}")
-#                     raise
-#                 LOGGER.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {retry_delay} seconds...")
-#                 sleep(retry_delay * (attempt + 1))
-
-# # tests/model_serving/model_runtime/triton/basic_model_deployment/test_pytorch_model.py
-# import json
-# import logging
-# import pytest
-# import requests
-# from typing import Dict, Any
-# from time import sleep
-# from simple_logger.logger import get_logger
-
-# from tests.model_serving.model_runtime.triton.constant import TEMPLATE_MAP, PREDICT_RESOURCES
-# from utilities.constants import KServeDeploymentType, Protocols
-
-# LOGGER = get_logger(name=__name__)
-
-# @pytest.mark.tier2
-# # @pytest.mark.parametrize("deprecated", [True], ids=["RHOAIENG-11561"])
-# class TestPyTorchModelInference:
-#     @pytest.fixture(scope="class")
-#     def pytorch_model_data(self):
-#         """Load PyTorch model test data"""
-#         input_path = "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-rest-input.json"
-#         expected_path = "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-rest-output.json"
-        
-#         with open(input_path) as f:
-#             input_data = json.load(f)
-        
-#         with open(expected_path) as f:
-#             expected_output = json.load(f)
-        
-#         return {
-#             "input": input_data,
-#             "expected_output": expected_output
-#         }
-
-#     @pytest.fixture(scope="class")
-#     def triton_inference_service_kwargs(self):
-#         """Configuration for the PyTorch InferenceService"""
-#         return {
-#             "name": "pytorch-model",
-#             "deployment_type": KServeDeploymentType.SERVERLESS,
-#             "deployment_mode": KServeDeploymentType.SERVERLESS,
-#             "gpu_count": 1,
-#             "runtime_argument": ["--model-repository=/mnt/models"],
-#             "min-replicas": 1
-#         }
-
-#     def test_pytorch_model_rest_inference(
-#         self,
-#         triton_inference_service,
-#         pytorch_model_data,
-#         response_snapshot,
-#         request
-#     ):
-#         """
-#         Test PyTorch model inference via Triton on KServe using REST API
-#         """
-#         LOGGER.info(f"Running test: {request.node.name}")
-        
-#         # 1. Verify inference service is ready
-#         assert triton_inference_service.instance.is_ready(), "InferenceService is not ready"
-        
-#         # 2. Get inference URL
-#         inference_url = self._get_inference_url(triton_inference_service)
-#         LOGGER.info(f"Inference URL: {inference_url}")
-        
-#         # 3. Verify inference
-#         self._verify_inference(
-#             inference_url,
-#             pytorch_model_data["input"],
-#             pytorch_model_data["expected_output"],
-#             response_snapshot
-#         )
-
-#     def _get_inference_url(self, inference_service) -> str:
-#         """Construct the inference URL from the InferenceService status"""
-#         if not inference_service.instance.status.get("url"):
-#             pytest.fail("InferenceService does not have a URL in status")
-        
-#         # Use REST protocol endpoint
-#         return f"{inference_service.instance.status['url']}/v2/models/pytorch-model/infer"
-
-#     def _verify_inference(
-#         self,
-#         inference_url: str,
-#         input_data: Dict,
-#         expected_output: Dict,
-#         snapshot,
-#         max_retries: int = 5,
-#         retry_delay: int = 5
-#     ) -> None:
-#         """
-#         Verify model inference with retries
-#         """
-#         for attempt in range(max_retries):
-#             try:
-#                 response = requests.post(
-#                     inference_url,
-#                     json=input_data,
-#                     headers={"Content-Type": "application/json"},
-#                     timeout=30
-#                 )
-#                 response.raise_for_status()
-                
-#                 actual_output = response.json()
-                
-#                 # Verify against expected output
-#                 assert actual_output == expected_output, \
-#                     f"Inference output mismatch. Expected: {expected_output}, Actual: {actual_output}"
-                
-#                 # Verify against snapshot if needed
-#                 snapshot.assert_match(actual_output)
-                
-#                 LOGGER.info("Inference verification successful")
-#                 return
-            
-#             except (AssertionError, requests.RequestException) as e:
-#                 if attempt == max_retries - 1:
-#                     LOGGER.error(f"Final attempt failed: {e}")
-#                     raise
-#                 LOGGER.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {retry_delay} seconds...")
-#                 sleep(retry_delay * (attempt + 1))
-
-
-
-import json
-import logging
 import pytest
-import requests
-from typing import Dict, Any
-from time import sleep
+from ocp_resources.inference_service import InferenceService
+from ocp_resources.pod import Pod
 from simple_logger.logger import get_logger
 
-from tests.model_serving.model_runtime.triton.constant import TEMPLATE_MAP, PREDICT_RESOURCES
-from utilities.constants import KServeDeploymentType, Protocols
+from utilities.constants import Protocols
+from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import validate_inference_request
+from tests.model_serving.model_runtime.triton.constant import (
+    BASE_RAW_DEPLOYMENT_CONFIG,
+    BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+    MODEL_PATH_PREFIX,
+    TRITON_GRPC_INPUT_QUERY,
+    TRITON_REST_INPUT_QUERY,
+)
 
 LOGGER = get_logger(name=__name__)
 
-@pytest.mark.tier2
-class TestPyTorchModelInference:  # Removed deprecated parameterization
-    @pytest.fixture(scope="class")
-    def pytorch_model_data(self):
-        """Load PyTorch model test data"""
-        input_path = "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-rest-input.json"
-        expected_path = "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-rest-output.json"
-        
-        with open(input_path) as f:
-            input_data = json.load(f)
-        
-        with open(expected_path) as f:
-            expected_output = json.load(f)
-        
-        return {
-            "input": input_data,
-            "expected_output": expected_output
-        }
+MODEL_NAME = "resnet50"
+MODEL_VERSION = "1"
+MODEL_NAME_DICT = {"name": MODEL_NAME}
+# MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}/{MODEL_NAME}"}
+MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}"}
 
-    @pytest.fixture(scope="class")
-    def triton_inference_service_kwargs(self):
-        """Configuration for the PyTorch InferenceService"""
-        return {
-            "name": "pytorch-model",
-            "deployment_type": KServeDeploymentType.SERVERLESS,
-            "deployment_mode": KServeDeploymentType.SERVERLESS,
-            "gpu_count": 1,
-            "runtime_argument": ["--model-repository=/mnt/models"],
-            "min-replicas": 1
-        }
+pytestmark = pytest.mark.usefixtures(
+    "root_dir", "valid_aws_config", "triton_rest_serving_runtime_template", "triton_grpc_serving_runtime_template"
+)
 
-    def test_pytorch_model_rest_inference(
+@pytest.mark.parametrize(
+    ("protocol", "model_namespace", "triton_inference_service", "s3_models_storage_uri", "triton_serving_runtime"),
+    [
+        pytest.param(
+            {"protocol_type": Protocols.REST},
+            {"name": "resnet50-raw-rest"},
+            {
+                **BASE_RAW_DEPLOYMENT_CONFIG,
+                **MODEL_NAME_DICT,
+            },
+            MODEL_STORAGE_URI_DICT,
+            BASE_RAW_DEPLOYMENT_CONFIG,
+            id="resnet50-raw-rest-deployment",
+        ),
+        pytest.param(
+            {"protocol_type": Protocols.GRPC},
+            {"name": "resnet50-raw-grpc"},
+            {
+                **BASE_RAW_DEPLOYMENT_CONFIG,
+                **MODEL_NAME_DICT,
+            },
+            MODEL_STORAGE_URI_DICT,
+            BASE_RAW_DEPLOYMENT_CONFIG,
+            id="resnet50-raw-grpc-deployment",
+        ),
+        pytest.param(
+            {"protocol_type": Protocols.REST},
+            {"name": "resnet50-serverless-rest"},
+            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG, **MODEL_NAME_DICT},
+            MODEL_STORAGE_URI_DICT,
+            BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+            id="resnet50-serverless-rest-deployment",
+        ),
+        pytest.param(
+            {"protocol_type": Protocols.GRPC},
+            {"name": "resnet50-serverless-grpc"},
+            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG, **MODEL_NAME_DICT},
+            MODEL_STORAGE_URI_DICT,
+            BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+            id="resnet50-serverless-grpc-deployment",
+        ),
+    ],
+    indirect=True,
+)
+class TestResNet50Model:
+    """
+    Test class for ResNet50 inference using Triton on KServe.
+
+    Covers:
+    - REST and gRPC protocols
+    - Raw and serverless modes
+    - Snapshot validation of inference results
+    """
+
+    def test_resnet50_inference(
         self,
-        triton_inference_service,
-        pytorch_model_data,
-        response_snapshot,
-        request
-    ):
-        """
-        Test PyTorch model inference via Triton on KServe using REST API
-        """
-        LOGGER.info(f"Running test: {request.node.name}")
-        
-        # 1. Verify inference service is ready
-        assert triton_inference_service.instance.is_ready(), "InferenceService is not ready"
-        
-        # 2. Get inference URL
-        inference_url = self._get_inference_url(triton_inference_service)
-        LOGGER.info(f"Inference URL: {inference_url}")
-        
-        # 3. Verify inference
-        self._verify_inference(
-            inference_url,
-            pytorch_model_data["input"],
-            pytorch_model_data["expected_output"],
-            response_snapshot
-        )
-
-    def _get_inference_url(self, inference_service) -> str:
-        """Construct the inference URL from the InferenceService status"""
-        if not inference_service.instance.status.get("url"):
-            pytest.fail("InferenceService does not have a URL in status")
-        
-        # Use REST protocol endpoint
-        return f"{inference_service.instance.status['url']}/v2/models/pytorch-model/infer"
-
-    def _verify_inference(
-        self,
-        inference_url: str,
-        input_data: Dict,
-        expected_output: Dict,
-        snapshot,
-        max_retries: int = 5,
-        retry_delay: int = 5
+        triton_inference_service: InferenceService,
+        triton_pod_resource: Pod,
+        triton_response_snapshot: Any,
+        protocol: str,
+        root_dir: str,
     ) -> None:
         """
-        Verify model inference with retries
+        Run inference and validate against snapshot.
+
+        Args:
+            triton_inference_service: The deployed InferenceService object
+            triton_pod_resource: The pod running the model server
+            triton_response_snapshot: Expected response snapshot
+            protocol: REST or gRPC
+            root_dir: Root directory for test execution
         """
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(
-                    inference_url,
-                    json=input_data,
-                    headers={"Content-Type": "application/json"},
-                    timeout=30
-                )
-                response.raise_for_status()
-                
-                actual_output = response.json()
-                
-                # Verify against expected output
-                assert actual_output == expected_output, \
-                    f"Inference output mismatch. Expected: {expected_output}, Actual: {actual_output}"
-                
-                # Verify against snapshot if needed
-                snapshot.assert_match(actual_output)
-                
-                LOGGER.info("Inference verification successful")
-                return
-            
-            except (AssertionError, requests.RequestException) as e:
-                if attempt == max_retries - 1:
-                    LOGGER.error(f"Final attempt failed: {e}")
-                    raise
-                LOGGER.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {retry_delay} seconds...")
-                sleep(retry_delay * (attempt + 1))
+        input_query = TRITON_REST_INPUT_QUERY if protocol == Protocols.REST else TRITON_GRPC_INPUT_QUERY
+
+        validate_inference_request(
+            pod_name=triton_pod_resource.name,
+            isvc=triton_inference_service,
+            response_snapshot=triton_response_snapshot,
+            input_query=input_query,
+            model_version=MODEL_VERSION,
+            protocol=protocol,
+            root_dir=root_dir,
+        )

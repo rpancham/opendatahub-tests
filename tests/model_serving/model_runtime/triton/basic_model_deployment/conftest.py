@@ -1,402 +1,10 @@
-# # from typing import Any, Generator
-# # import copy
-# # import pytest
-# # from kubernetes.dynamic import DynamicClient
-# # from ..constant import TEMPLATE_MAP, PREDICT_RESOURCES
-# # from ocp_resources.namespace import Namespace
-# # from ocp_resources.serving_runtime import ServingRuntime
-# # from ocp_resources.inference_service import InferenceService
-# # from ocp_resources.pod import Pod
-# # from ocp_resources.secret import Secret
-# # from ocp_resources.template import Template
-# # from ocp_resources.service_account import ServiceAccount
-# # from tests.model_serving.model_runtime.vllm.utils import (
-# #     kserve_s3_endpoint_secret,
-# #     validate_supported_quantization_schema,
-# #     skip_if_deployment_mode,
-# # )
-# # from utilities.constants import KServeDeploymentType, Labels, RuntimeTemplates, Protocols
-# # from pytest import FixtureRequest
-# # from syrupy.extensions.json import JSONSnapshotExtension
-# # from tests.model_serving.model_runtime.triton.constant import TEMPLATE_MAP, PREDICT_RESOURCES
-# # from tests.model_serving.model_runtime.triton.constant import TEMPLATE_FILE
-# # from simple_logger.logger import get_logger
-
-# # from utilities.inference_utils import create_isvc
-# # from utilities.infra import get_pods_by_isvc_label
-# # from utilities.serving_runtime import ServingRuntimeFromTemplate
-
-# # LOGGER = get_logger(name=__name__)
-
-# # @pytest.fixture(scope="session")
-# # def triton_runtime_image(pytestconfig: pytest.Config) -> str | None:
-# #     runtime_image = pytestconfig.option.triton_runtime_image
-# #     if not runtime_image:
-# #         return None
-# #     return runtime_image
-
-# # @pytest.fixture(scope="class")
-# # def triton_grpc_serving_runtime_template(admin_client: DynamicClient) -> Template:
-# #     grpc_template_yaml = TEMPLATE_FILE.get(Protocols.GRPC)
-# #     with Template(
-# #         client=admin_client,
-# #         yaml_file=grpc_template_yaml,
-# #     ) as tp:
-# #         yield tp
-
-
-# # @pytest.fixture(scope="class")
-# # def triton_rest_serving_runtime_template(admin_client: DynamicClient) -> Template:
-# #     rest_template_yaml = TEMPLATE_FILE.get(Protocols.REST)
-# #     with Template(
-# #         client=admin_client,
-# #         yaml_file=rest_template_yaml,
-# #     ) as tp:
-# #         yield tp
-
-
-# # @pytest.fixture(scope="class")
-# # def serving_runtime(
-# #     request: FixtureRequest,
-# #     admin_client: DynamicClient,
-# #     model_namespace: Namespace,
-# #     protocol: str,
-# #     triton_runtime_image: str,  # Injected here from above fixture
-# # ) -> Generator[ServingRuntime, None, None]:
-# #     protocol = protocol.lower()
-# #     template_name = TEMPLATE_MAP.get(protocol, RuntimeTemplates.TRITON_REST)
-# #     with ServingRuntimeFromTemplate(
-# #         client=admin_client,
-# #         name="triton-runtime",
-# #         namespace=model_namespace.name,
-# #         template_name=template_name,
-# #         deployment_type=request.param["deployment_type"],
-# #         runtime_image=triton_runtime_image,
-# #     ) as model_runtime:
-# #         yield model_runtime
-
-
-# # @pytest.fixture(scope="class")
-# # def triton_inference_service(
-# #     request: FixtureRequest,
-# #     admin_client: DynamicClient,
-# #     model_namespace: Namespace,
-# #     serving_runtime: ServingRuntime,
-# #     s3_models_storage_uri: str,
-# #     model_service_account: ServiceAccount,
-# # ) -> Generator[InferenceService, Any, Any]:
-# #     isvc_kwargs = {
-# #         "client": admin_client,
-# #         "name": request.param["name"],
-# #         "namespace": model_namespace.name,
-# #         "runtime": serving_runtime.name,
-# #         "storage_uri": s3_models_storage_uri,
-# #         "model_format": serving_runtime.instance.spec.supportedModelFormats[0].name,
-# #         "model_service_account": model_service_account.name,
-# #         "deployment_mode": request.param.get("deployment_mode", KServeDeploymentType.SERVERLESS),
-# #     }
-
-# #     gpu_count = request.param.get("gpu_count")
-# #     timeout = request.param.get("timeout")
-# #     resources: Any = copy.deepcopy(PREDICT_RESOURCES["resources"])
-
-# #     if gpu_count:
-# #         identifier = Labels.Nvidia.NVIDIA_COM_GPU
-# #         resources["requests"][identifier] = gpu_count
-# #         resources["limits"][identifier] = gpu_count
-# #         isvc_kwargs["resources"] = resources
-
-# #         if gpu_count > 1:
-# #             isvc_kwargs["volumes"] = PREDICT_RESOURCES["volumes"]
-# #             isvc_kwargs["volume_mounts"] = PREDICT_RESOURCES["volume_mounts"]
-
-# #     if timeout:
-# #         isvc_kwargs["timeout"] = timeout
-
-# #     arguments = request.param.get("runtime_argument", [])
-# #     arguments = [
-# #         arg for arg in arguments
-# #         if not (arg.startswith("--tensor-parallel-size") or arg.startswith("--quantization"))
-# #     ]
-# #     if gpu_count:
-# #         arguments.append(f"--tensor-parallel-size={gpu_count}")
-# #     if quantization := request.param.get("quantization"):
-# #         validate_supported_quantization_schema(q_type=quantization)
-# #         arguments.append(f"--quantization={quantization}")
-# #     if arguments:
-# #         isvc_kwargs["argument"] = arguments
-
-# #     isvc_kwargs["min_replicas"] = request.param.get("min-replicas")
-
-# #     with create_isvc(**isvc_kwargs) as isvc:
-# #         yield isvc
-
-
-# # @pytest.fixture(scope="class")
-# # def model_service_account(admin_client: DynamicClient, kserve_endpoint_s3_secret: Secret) -> ServiceAccount:
-# #     with ServiceAccount(
-# #         client=admin_client,
-# #         namespace=kserve_endpoint_s3_secret.namespace,
-# #         name="models-bucket-sa",
-# #         secrets=[{"name": kserve_endpoint_s3_secret.name}],
-# #     ) as sa:
-# #         yield sa
-
-
-# # @pytest.fixture(scope="class")
-# # def kserve_endpoint_s3_secret(
-# #     admin_client: DynamicClient,
-# #     model_namespace: Namespace,
-# #     aws_access_key_id: str,
-# #     aws_secret_access_key: str,
-# #     models_s3_bucket_region: str,
-# #     models_s3_bucket_endpoint: str,
-# # ) -> Secret:
-# #     with kserve_s3_endpoint_secret(
-# #         admin_client=admin_client,
-# #         name="models-bucket-secret",
-# #         namespace=model_namespace.name,
-# #         aws_access_key=aws_access_key_id,
-# #         aws_secret_access_key=aws_secret_access_key,
-# #         aws_s3_region=models_s3_bucket_region,
-# #         aws_s3_endpoint=models_s3_bucket_endpoint,
-# #     ) as secret:
-# #         yield secret
-
-
-# # @pytest.fixture
-# # def response_snapshot(snapshot: Any) -> Any:
-# #     return snapshot.use_extension(extension_class=JSONSnapshotExtension)
-
-
-# # @pytest.fixture
-# # def triton_pod_resource(admin_client: DynamicClient, triton_inference_service: InferenceService) -> Pod:
-# #     return get_pods_by_isvc_label(client=admin_client, isvc=triton_inference_service)[0]
-
-
-# # @pytest.fixture
-# # def skip_if_serverless_deployemnt(triton_inference_service: InferenceService) -> None:
-# #     skip_if_deployment_mode(
-# #         isvc=triton_inference_service,
-# #         deployment_type=KServeDeploymentType.SERVERLESS,
-# #         deployment_message="Test is being skipped because model is being deployed in serverless mode",
-# #     )
-
-
-# # @pytest.fixture
-# # def skip_if_raw_deployemnt(triton_inference_service: InferenceService) -> None:
-# #     skip_if_deployment_mode(
-# #         isvc=triton_inference_service,
-# #         deployment_type=KServeDeploymentType.RAW_DEPLOYMENT,
-# #         deployment_message="Test is being skipped because model is being deployed in raw mode",
-# #     )
-
-
-# from typing import Any, Generator
-# import pytest
-# from kubernetes.dynamic import DynamicClient
-# from ocp_resources.namespace import Namespace
-# from ocp_resources.serving_runtime import ServingRuntime
-# from ocp_resources.inference_service import InferenceService
-# from ocp_resources.pod import Pod
-# from ocp_resources.secret import Secret
-# from ocp_resources.template import Template
-# from ocp_resources.service_account import ServiceAccount
-# from tests.model_serving.model_runtime.vllm.utils import (
-#     kserve_s3_endpoint_secret,
-#     validate_supported_quantization_schema,
-#     skip_if_deployment_mode,
-# )
-
-# from pytest import FixtureRequest
-# from syrupy.extensions.json import JSONSnapshotExtension
-# from simple_logger.logger import get_logger
-# from utilities.inference_utils import create_isvc
-# from utilities.infra import get_pods_by_isvc_label
-# from utilities.serving_runtime import ServingRuntimeFromTemplate
-
-# LOGGER = get_logger(name=__name__)
-# try:
-#     from utilities.constants import RuntimeTemplates, Protocols, KServeDeploymentType, Labels
-# except ImportError:
-#     class Protocols:
-#         REST = "rest"
-#         GRPC = "grpc"
-#     class RuntimeTemplates:
-#         TRITON_REST = "triton-rest"
-#         TRITON_GRPC = "triton-grpc"
-#     class KServeDeploymentType:
-#         SERVERLESS = "Serverless"
-#         RAW_DEPLOYMENT = "RawDeployment"
-#     class Labels:
-#         class Nvidia:
-#             NVIDIA_COM_GPU = "nvidia.com/gpu"
-# if not hasattr(RuntimeTemplates, 'TRITON_REST'):
-#     RuntimeTemplates.TRITON_REST = "triton-rest"
-# if not hasattr(RuntimeTemplates, 'TRITON_GRPC'):
-#     RuntimeTemplates.TRITON_GRPC = "triton-grpc"
-
-# from ..constant import TEMPLATE_MAP, PREDICT_RESOURCES
-# @pytest.fixture(scope="class")
-# def triton_grpc_serving_runtime_template(admin_client: DynamicClient) -> Template:
-#     grpc_template_yaml = "triton_grpc_serving_template.yaml"
-#     with Template(
-#         client=admin_client,
-#         name="triton-grpc-template",
-#         namespace="default",
-#     ) as tp:
-#         yield tp
-# @pytest.fixture(scope="class")
-
-# def triton_rest_serving_runtime_template(admin_client: DynamicClient) -> Template:
-#     rest_template_yaml = "triton_onnx_rest_servingruntime.yaml"
-#     with Template(
-#         client=admin_client,
-#         name="triton-rest-template",
-#         namespace="default",
-#     ) as tp:
-#         yield tp
-# @pytest.fixture(scope="class")
-
-# def serving_runtime(
-#     request: FixtureRequest,
-#     admin_client: DynamicClient,
-#     model_namespace: Namespace,
-#     protocol: str,
-#     triton_runtime_image: str,
-# ) -> Generator[ServingRuntime, None, None]:
-#     protocol = protocol.lower()
-#     template_name = TEMPLATE_MAP.get(protocol, RuntimeTemplates.TRITON_REST)
-#     with ServingRuntimeFromTemplate(
-#         client=admin_client,
-#         name="triton-runtime",
-#         namespace=model_namespace.name,
-#         template_name=template_name,
-#         deployment_type=request.param["deployment_type"],
-#         runtime_image=triton_runtime_image,
-#     ) as model_runtime:
-#         yield model_runtime
-
-# @pytest.fixture(scope="class")
-# def triton_inference_service(
-#     request: FixtureRequest,
-#     admin_client: DynamicClient,
-#     model_namespace: Namespace,
-#     serving_runtime: ServingRuntime,
-#     s3_models_storage_uri: str,
-#     model_service_account: ServiceAccount,
-# ) -> Generator[InferenceService, Any, Any]:
-#     isvc_kwargs = {
-#         "client": admin_client,
-#         "name": request.param["name"],
-#         "namespace": model_namespace.name,
-#         "runtime": serving_runtime.name,
-#         "storage_uri": s3_models_storage_uri,
-#         "model_format": serving_runtime.instance.spec.supportedModelFormats[0].name,
-#         "model_service_account": model_service_account.name,
-#         "deployment_mode": request.param.get("deployment_mode", KServeDeploymentType.SERVERLESS),
-#     }
-
-#     gpu_count = request.param.get("gpu_count")
-#     timeout = request.param.get("timeout")
-#     resources: Any = copy.deepcopy(PREDICT_RESOURCES["resources"])
-
-#     if gpu_count:
-#         identifier = Labels.Nvidia.NVIDIA_COM_GPU
-#         resources["requests"][identifier] = gpu_count
-#         resources["limits"][identifier] = gpu_count
-#         isvc_kwargs["resources"] = resources
-
-#         if gpu_count > 1:
-#             isvc_kwargs["volumes"] = PREDICT_RESOURCES["volumes"]
-#             isvc_kwargs["volume_mounts"] = PREDICT_RESOURCES["volume_mounts"]
-
-#     if timeout:
-#         isvc_kwargs["timeout"] = timeout
-
-#     arguments = request.param.get("runtime_argument", [])
-#     arguments = [
-#         arg for arg in arguments
-#         if not (arg.startswith("--tensor-parallel-size") or arg.startswith("--quantization"))
-#     ]
-#     if gpu_count:
-#         arguments.append(f"--tensor-parallel-size={gpu_count}")
-#     if quantization := request.param.get("quantization"):
-#         validate_supported_quantization_schema(q_type=quantization)
-#         arguments.append(f"--quantization={quantization}")
-#     if arguments:
-#         isvc_kwargs["argument"] = arguments
-
-#     isvc_kwargs["min_replicas"] = request.param.get("min-replicas")
-
-#     with create_isvc(**isvc_kwargs) as isvc:
-#         yield isvc
-
-
-# @pytest.fixture(scope="class")
-# def model_service_account(admin_client: DynamicClient, kserve_endpoint_s3_secret: Secret) -> ServiceAccount:
-#     with ServiceAccount(
-#         client=admin_client,
-#         namespace=kserve_endpoint_s3_secret.namespace,
-#         name="models-bucket-sa",
-#         secrets=[{"name": kserve_endpoint_s3_secret.name}],
-#     ) as sa:
-#         yield sa
-
-
-# @pytest.fixture(scope="class")
-# def kserve_endpoint_s3_secret(
-#     admin_client: DynamicClient,
-#     model_namespace: Namespace,
-#     aws_access_key_id: str,
-#     aws_secret_access_key: str,
-#     models_s3_bucket_region: str,
-#     models_s3_bucket_endpoint: str,
-# ) -> Secret:
-#     with kserve_s3_endpoint_secret(
-#         admin_client=admin_client,
-#         name="models-bucket-secret",
-#         namespace=model_namespace.name,
-#         aws_access_key=aws_access_key_id,
-#         aws_secret_access_key=aws_secret_access_key,
-#         aws_s3_region=models_s3_bucket_region,
-#         aws_s3_endpoint=models_s3_bucket_endpoint,
-#     ) as secret:
-#         yield secret
-
-
-# @pytest.fixture
-# def response_snapshot(snapshot: Any) -> Any:
-#     return snapshot.use_extension(extension_class=JSONSnapshotExtension)
-
-
-# @pytest.fixture
-# def triton_pod_resource(admin_client: DynamicClient, triton_inference_service: InferenceService) -> Pod:
-#     return get_pods_by_isvc_label(client=admin_client, isvc=triton_inference_service)[0]
-
-
-# @pytest.fixture
-# def skip_if_serverless_deployemnt(triton_inference_service: InferenceService) -> None:
-#     skip_if_deployment_mode(
-#         isvc=triton_inference_service,
-#         deployment_type=KServeDeploymentType.SERVERLESS,
-#         deployment_message="Test is being skipped because model is being deployed in serverless mode",
-#     )
-
-
-# @pytest.fixture
-# def skip_if_raw_deployemnt(triton_inference_service: InferenceService) -> None:
-#     skip_if_deployment_mode(
-#         isvc=triton_inference_service,
-#         deployment_type=KServeDeploymentType.RAW_DEPLOYMENT,
-#         deployment_message="Test is being skipped because model is being deployed in raw mode",
-#     )
-
-# tests/model_serving/model_runtime/triton/basic_model_deployment/conftest.py 
+from typing import cast, Any, Generator
 import copy
-import os
+
 import pytest
-from typing import Any, Generator
+from syrupy.extensions.json import JSONSnapshotExtension
+from pytest_testconfig import config as py_config
+
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.namespace import Namespace
 from ocp_resources.serving_runtime import ServingRuntime
@@ -405,133 +13,124 @@ from ocp_resources.pod import Pod
 from ocp_resources.secret import Secret
 from ocp_resources.template import Template
 from ocp_resources.service_account import ServiceAccount
-from tests.model_serving.model_runtime.vllm.utils import (
-    kserve_s3_endpoint_secret,
-    validate_supported_quantization_schema,
-    skip_if_deployment_mode,
+
+from tests.model_serving.model_runtime.triton.constant import (
+    PREDICT_RESOURCES,
+    RUNTIME_MAP,
+    TEMPLATE_MAP,
+    TEMPLATE_FILE_PATH,
 )
-from pytest import FixtureRequest
-from syrupy.extensions.json import JSONSnapshotExtension
-from simple_logger.logger import get_logger
+from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import kserve_s3_endpoint_secret
+
+from utilities.constants import (
+    KServeDeploymentType,
+    Labels,
+    RuntimeTemplates,
+    Protocols,
+)
 from utilities.inference_utils import create_isvc
 from utilities.infra import get_pods_by_isvc_label
 from utilities.serving_runtime import ServingRuntimeFromTemplate
 
+from simple_logger.logger import get_logger
+
 
 LOGGER = get_logger(name=__name__)
-try:
-    from utilities.constants import RuntimeTemplates, Protocols, KServeDeploymentType, Labels
-except ImportError:
-    class Protocols:
-        REST = "rest"
-        GRPC = "grpc"
-    class RuntimeTemplates:
-        TRITON_REST = "triton-rest"
-        TRITON_GRPC = "triton-grpc"
-    class KServeDeploymentType:
-        SERVERLESS = "Serverless"
-        RAW_DEPLOYMENT = "RawDeployment"
-    class Labels:
-        class Nvidia:
-            NVIDIA_COM_GPU = "nvidia.com/gpu"
-if not hasattr(RuntimeTemplates, 'TRITON_REST'):
-    RuntimeTemplates.TRITON_REST = "triton-rest"
-if not hasattr(RuntimeTemplates, 'TRITON_GRPC'):
-    RuntimeTemplates.TRITON_GRPC = "triton-grpc"
 
-from ..constant import TEMPLATE_MAP, PREDICT_RESOURCES
-
-# Add command-line options
-def pytest_addoption(parser):
-    parser.addoption("--model-s3-bucket-name", action="store", default="")
-    parser.addoption("--model-s3-bucket-region", action="store", default="")
-    parser.addoption("--model-s3-bucket-endpoint", action="store", default="")
-    parser.addoption("--aws-access-key-id", action="store", default="")
-    parser.addoption("--aws-secret-access-key", action="store", default="")
 
 @pytest.fixture(scope="session")
-def aws_access_key_id(request):
-    # Use the existing option from root conftest
-    return request.config.getoption("--aws-access-key-id")
+def root_dir(pytestconfig: pytest.Config) -> Any:
+    """
+    Provides the root directory path of the pytest project for the entire test session.
 
-@pytest.fixture(scope="session")
-def aws_secret_access_key(request):
-    # Use the existing option from root conftest
-    return request.config.getoption("--aws-secret-access-key")
+    Args:
+        pytestconfig (pytest.Config): The pytest configuration object.
 
-@pytest.fixture(scope="session")
-def models_s3_bucket_region(request):
-    # Use the existing option from root conftest
-    return request.config.getoption("--models-s3-bucket-region")
+    Returns:
+        Any: The root path of the pytest project.
+    """
+    return pytestconfig.rootpath
 
-@pytest.fixture(scope="session")
-def models_s3_bucket_endpoint(request):
-    # Use the existing option from root conftest
-    return request.config.getoption("--models-s3-bucket-endpoint")
-
-@pytest.fixture(scope="session")
-def s3_models_storage_uri(request):
-    # Use the existing option from root conftest
-    bucket_name = request.config.getoption("--models-s3-bucket-name")
-    return f"s3://{bucket_name}/triton/model_repository/"
-
-
-
-
-# @pytest.fixture(scope="session")
-# def aws_access_key_id():
-#     return os.environ.get("AWS_ACCESS_KEY_ID")
-
-# @pytest.fixture(scope="session")
-# def aws_secret_access_key():
-#     return os.environ.get("AWS_SECRET_ACCESS_KEY")
-
-# @pytest.fixture(scope="session")
-# def models_s3_bucket_region():
-#     return os.environ.get("MODEL_S3_BUCKET_REGION", "us-east-1")  
-
-# @pytest.fixture(scope="session")
-# def models_s3_bucket_endpoint():
-#     return os.environ.get("MODEL_S3_BUCKET_ENDPOINT", "https://s3.us-east-1.amazonaws.com/")
-
-# @pytest.fixture(scope="session")
-# def s3_models_storage_uri():
-#     bucket_name = os.environ["MODEL_S3_BUCKET_NAME"]  
-#     return f"s3://{bucket_name}/triton/model_repository/"
 
 @pytest.fixture(scope="class")
-def triton_grpc_serving_runtime_template(admin_client: DynamicClient) -> Template:
-    grpc_template_yaml = "triton_grpc_serving_template.yaml"
+def triton_grpc_serving_runtime_template(admin_client: DynamicClient) -> Generator[Template, None, None]:
+    """
+    Provides a gRPC serving runtime Template for Triton within the test class scope.
+
+    Args:
+        admin_client (DynamicClient): Kubernetes dynamic client.
+
+    Yields:
+        Template: The loaded gRPC serving runtime Template.
+    """
+    grpc_template_yaml = TEMPLATE_FILE_PATH.get(Protocols.GRPC)
     with Template(
         client=admin_client,
-        name="triton-grpc-template",
-        namespace="default",
+        yaml_file=grpc_template_yaml,
+        namespace=py_config["applications_namespace"],
     ) as tp:
         yield tp
 
+
 @pytest.fixture(scope="class")
-def triton_rest_serving_runtime_template(admin_client: DynamicClient) -> Template:
-    rest_template_yaml = "triton_onnx_rest_servingruntime.yaml"
+def triton_rest_serving_runtime_template(admin_client: DynamicClient) -> Generator[Template, None, None]:
+    """
+    Provides a REST serving runtime Template for Triton within the test class scope.
+
+    Args:
+        admin_client (DynamicClient): Kubernetes dynamic client.
+
+    Yields:
+        Template: The loaded REST serving runtime Template.
+    """
+    rest_template_yaml = TEMPLATE_FILE_PATH.get(Protocols.REST)
     with Template(
         client=admin_client,
-        name="triton-rest-template",
-        namespace="default",
+        yaml_file=rest_template_yaml,
+        namespace=py_config["applications_namespace"],
     ) as tp:
         yield tp
 
+
 @pytest.fixture(scope="class")
-def serving_runtime(
-    request: FixtureRequest,
+def protocol(request: pytest.FixtureRequest) -> str:
+    """
+    Provides the protocol type parameter for the test class.
+
+    Args:
+        request (pytest.FixtureRequest): The pytest fixture request object.
+
+    Returns:
+        str: The protocol type specified in the test parameter.
+    """
+    return request.param["protocol_type"]
+
+
+@pytest.fixture(scope="class")
+def triton_serving_runtime(
+    request: pytest.FixtureRequest,
     admin_client: DynamicClient,
     model_namespace: Namespace,
-    protocol: str,
     triton_runtime_image: str,
+    protocol: str,
 ) -> Generator[ServingRuntime, None, None]:
-    protocol = protocol.lower()
+    """
+    Provides a ServingRuntime resource for Triton with the specified protocol and deployment type.
+
+    Args:
+        request (pytest.FixtureRequest): Pytest fixture request containing parameters.
+        admin_client (DynamicClient): Kubernetes dynamic client.
+        model_namespace (Namespace): Kubernetes namespace for model deployment.
+        triton_runtime_image (str): The container image for the Triton runtime.
+        protocol (str): The protocol to use (e.g., REST or GRPC).
+
+    Yields:
+        ServingRuntime: An instance of the Triton ServingRuntime configured as per parameters.
+    """
     template_name = TEMPLATE_MAP.get(protocol, RuntimeTemplates.TRITON_REST)
     with ServingRuntimeFromTemplate(
         client=admin_client,
-        name="triton-runtime",
+        name=RUNTIME_MAP.get(protocol, "triton-runtime"),
         namespace=model_namespace.name,
         template_name=template_name,
         deployment_type=request.param["deployment_type"],
@@ -539,73 +138,91 @@ def serving_runtime(
     ) as model_runtime:
         yield model_runtime
 
+
 @pytest.fixture(scope="class")
 def triton_inference_service(
-    request: FixtureRequest,
+    request: pytest.FixtureRequest,
     admin_client: DynamicClient,
     model_namespace: Namespace,
-    serving_runtime: ServingRuntime,
+    triton_serving_runtime: ServingRuntime,
     s3_models_storage_uri: str,
-    model_service_account: ServiceAccount,
+    triton_model_service_account: ServiceAccount,
 ) -> Generator[InferenceService, Any, Any]:
-    isvc_kwargs = {
+    """
+    Creates and yields a configured InferenceService instance for Triton testing.
+
+    Args:
+        request (pytest.FixtureRequest): Pytest fixture request containing test parameters.
+        admin_client (DynamicClient): Kubernetes dynamic client.
+        model_namespace (Namespace): Kubernetes namespace for model deployment.
+        triton_serving_runtime (ServingRuntime): The Triton ServingRuntime instance.
+        s3_models_storage_uri (str): URI for the S3 storage location of models.
+        triton_model_service_account (ServiceAccount): Service account for the model.
+
+    Yields:
+        InferenceService: A configured InferenceService resource.
+    """
+    params = request.param
+    service_config = {
         "client": admin_client,
-        "name": request.param["name"],
+        "name": params.get("name"),
         "namespace": model_namespace.name,
-        "runtime": serving_runtime.name,
+        "runtime": triton_serving_runtime.name,
         "storage_uri": s3_models_storage_uri,
-        "model_format": serving_runtime.instance.spec.supportedModelFormats[0].name,
-        "model_service_account": model_service_account.name,
-        "deployment_mode": request.param.get("deployment_mode", KServeDeploymentType.SERVERLESS),
+        "model_format": triton_serving_runtime.instance.spec.supportedModelFormats[0].name,
+        "model_service_account": triton_model_service_account.name,
+        "deployment_mode": params.get("deployment_type", KServeDeploymentType.RAW_DEPLOYMENT),
+        "external_route": params.get("enable_external_route", False),
     }
 
-    gpu_count = request.param.get("gpu_count")
-    timeout = request.param.get("timeout")
-    resources: Any = copy.deepcopy(PREDICT_RESOURCES["resources"])
+    gpu_count = params.get("gpu_count", 0)
+    timeout = params.get("timeout")
+    # timeout = 10*60
 
-    if gpu_count:
+    min_replicas = params.get("min-replicas")
+
+    resources = copy.deepcopy(cast(dict[str, dict[str, str]], PREDICT_RESOURCES["resources"]))
+    if gpu_count > 0:
         identifier = Labels.Nvidia.NVIDIA_COM_GPU
         resources["requests"][identifier] = gpu_count
         resources["limits"][identifier] = gpu_count
-        isvc_kwargs["resources"] = resources
-
-        if gpu_count > 1:
-            isvc_kwargs["volumes"] = PREDICT_RESOURCES["volumes"]
-            isvc_kwargs["volume_mounts"] = PREDICT_RESOURCES["volume_mounts"]
+        service_config["volumes"] = PREDICT_RESOURCES["volumes"]
+        service_config["volumes_mounts"] = PREDICT_RESOURCES["volume_mounts"]
+    service_config["resources"] = resources
 
     if timeout:
-        isvc_kwargs["timeout"] = timeout
+        service_config["timeout"] = timeout
 
-    arguments = request.param.get("runtime_argument", [])
-    arguments = [
-        arg for arg in arguments
-        if not (arg.startswith("--tensor-parallel-size") or arg.startswith("--quantization"))
-    ]
-    if gpu_count:
-        arguments.append(f"--tensor-parallel-size={gpu_count}")
-    if quantization := request.param.get("quantization"):
-        validate_supported_quantization_schema(q_type=quantization)
-        arguments.append(f"--quantization={quantization}")
-    if arguments:
-        isvc_kwargs["argument"] = arguments
+    if min_replicas:
+        service_config["min_replicas"] = min_replicas
 
-    isvc_kwargs["min_replicas"] = request.param.get("min-replicas")
-
-    with create_isvc(**isvc_kwargs) as isvc:
+    with create_isvc(**service_config) as isvc:
         yield isvc
 
+
 @pytest.fixture(scope="class")
-def model_service_account(admin_client: DynamicClient, kserve_endpoint_s3_secret: Secret) -> ServiceAccount:
+def triton_model_service_account(admin_client: DynamicClient, kserve_s3_secret: Secret) -> ServiceAccount:
+    """
+    Creates and yields a ServiceAccount linked to the provided S3 secret for Triton models.
+
+    Args:
+        admin_client (DynamicClient): Kubernetes dynamic client.
+        kserve_s3_secret (Secret): The Kubernetes secret containing S3 credentials.
+
+    Yields:
+        ServiceAccount: A ServiceAccount configured with access to the S3 secret.
+    """
     with ServiceAccount(
         client=admin_client,
-        namespace=kserve_endpoint_s3_secret.namespace,
-        name="models-bucket-sa",
-        secrets=[{"name": kserve_endpoint_s3_secret.name}],
+        namespace=kserve_s3_secret.namespace,
+        name="triton-models-bucket-sa",
+        secrets=[{"name": kserve_s3_secret.name}],
     ) as sa:
         yield sa
 
+
 @pytest.fixture(scope="class")
-def kserve_endpoint_s3_secret(
+def kserve_s3_secret(
     admin_client: DynamicClient,
     model_namespace: Namespace,
     aws_access_key_id: str,
@@ -613,9 +230,23 @@ def kserve_endpoint_s3_secret(
     models_s3_bucket_region: str,
     models_s3_bucket_endpoint: str,
 ) -> Secret:
+    """
+    Creates and yields a Kubernetes Secret configured for S3 access in KServe.
+
+    Args:
+        admin_client (DynamicClient): Kubernetes dynamic client.
+        model_namespace (Namespace): Namespace where the secret will be created.
+        aws_access_key_id (str): AWS access key ID.
+        aws_secret_access_key (str): AWS secret access key.
+        models_s3_bucket_region (str): AWS S3 bucket region.
+        models_s3_bucket_endpoint (str): AWS S3 bucket endpoint URL.
+
+    Yields:
+        Secret: A Kubernetes Secret configured with the provided AWS credentials and S3 endpoint.
+    """
     with kserve_s3_endpoint_secret(
         admin_client=admin_client,
-        name="models-bucket-secret",
+        name="triton-models-bucket-secret",
         namespace=model_namespace.name,
         aws_access_key=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
@@ -624,26 +255,40 @@ def kserve_endpoint_s3_secret(
     ) as secret:
         yield secret
 
+
 @pytest.fixture
-def response_snapshot(snapshot: Any) -> Any:
+def triton_response_snapshot(snapshot: Any) -> Any:
+    """
+    Provides a snapshot fixture configured to use JSONSnapshotExtension for Triton responses.
+
+    Args:
+        snapshot (Any): The base snapshot fixture.
+
+    Returns:
+        Any: Snapshot fixture extended with JSONSnapshotExtension.
+    """
     return snapshot.use_extension(extension_class=JSONSnapshotExtension)
 
-@pytest.fixture
-def triton_pod_resource(admin_client: DynamicClient, triton_inference_service: InferenceService) -> Pod:
-    return get_pods_by_isvc_label(client=admin_client, isvc=triton_inference_service)[0]
 
 @pytest.fixture
-def skip_if_serverless_deployemnt(triton_inference_service: InferenceService) -> None:
-    skip_if_deployment_mode(
-        isvc=triton_inference_service,
-        deployment_type=KServeDeploymentType.SERVERLESS,
-        deployment_message="Test is being skipped because model is being deployed in serverless mode",
-    )
+def triton_pod_resource(
+    admin_client: DynamicClient,
+    triton_inference_service: InferenceService,
+) -> Pod:
+    """
+    Retrieves the first Kubernetes Pod associated with the given Triton InferenceService.
 
-@pytest.fixture
-def skip_if_raw_deployemnt(triton_inference_service: InferenceService) -> None:
-    skip_if_deployment_mode(
-        isvc=triton_inference_service,
-        deployment_type=KServeDeploymentType.RAW_DEPLOYMENT,
-        deployment_message="Test is being skipped because model is being deployed in raw mode",
-    )
+    Args:
+        admin_client (DynamicClient): Kubernetes dynamic client.
+        triton_inference_service (InferenceService): The Triton InferenceService resource.
+
+    Returns:
+        Pod: The first Pod found for the InferenceService.
+
+    Raises:
+        RuntimeError: If no pods are found for the specified InferenceService.
+    """
+    pods = get_pods_by_isvc_label(client=admin_client, isvc=triton_inference_service)
+    if not pods:
+        raise RuntimeError(f"No pods found for InferenceService {triton_inference_service.name}")
+    return pods[0]

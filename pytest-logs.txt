@@ -1,1 +1,0 @@
-2025-06-09T11:06:18.634460 conftest [31mERROR[0m In test_pytorch_model_rest_inference: function uses no argument 'deprecated'[0m

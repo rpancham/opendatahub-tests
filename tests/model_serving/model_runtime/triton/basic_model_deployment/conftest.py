@@ -335,6 +335,7 @@ LOGGER = get_logger(name=__name__)
 def root_dir(pytestconfig: pytest.Config) -> Any:
     return pytestconfig.rootpath
 
+
 # def cleanup_namespace(admin_client: DynamicClient, ns_name: str, timeout: int = 60):
 #     ns = Namespace(client=admin_client, name=ns_name)
 #     if ns.exists:
@@ -399,6 +400,7 @@ def triton_rest_serving_runtime_template(admin_client: DynamicClient) -> Generat
         template.create()
 
     yield template
+
 
 @pytest.fixture(scope="class")
 def protocol(request: pytest.FixtureRequest) -> str:
@@ -522,6 +524,7 @@ def triton_pod_resource(
     if not pods:
         raise RuntimeError(f"No pods found for InferenceService {triton_inference_service.name}")
     return pods[0]
+
 
 @pytest.fixture(autouse=True)
 def cleanup_existing_isvc(request, admin_client: DynamicClient, model_namespace: Namespace):

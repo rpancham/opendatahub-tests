@@ -53,7 +53,7 @@ triton_response_snapshot = SnapshotAssertion(name='snapshot', num_executions=0),
     ) -> None:
         """
         Run inference and validate against snapshot.
-    
+
         Args:
             triton_inference_service: The deployed InferenceService object
             triton_pod_resource: The pod running the model server
@@ -62,7 +62,7 @@ triton_response_snapshot = SnapshotAssertion(name='snapshot', num_executions=0),
             root_dir: Root directory for test execution
         """
         input_query = TRITON_REST_ONNX_INPUT_QUERY if protocol == Protocols.REST else TRITON_GRPC_ONNX_INPUT_QUERY
-    
+
 >       validate_inference_request(
             pod_name=triton_pod_resource.name,
             isvc=triton_inference_service,
@@ -73,7 +73,7 @@ triton_response_snapshot = SnapshotAssertion(name='snapshot', num_executions=0),
             root_dir=root_dir,
         )
 
-tests/model_serving/model_runtime/triton/basic_model_deployment/test_onnx_model.py:118: 
+tests/model_serving/model_runtime/triton/basic_model_deployment/test_onnx_model.py:118:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/model_serving/model_runtime/triton/basic_model_deployment/utils.py:232: in validate_inference_request
     response = run_triton_inference(
@@ -87,7 +87,7 @@ self = <Response [400]>
 
     def raise_for_status(self):
         """Raises :class:`HTTPError`, if one occurred."""
-    
+
         http_error_msg = ""
         if isinstance(self.reason, bytes):
             # We attempt to decode utf-8 first because some servers
@@ -100,17 +100,17 @@ self = <Response [400]>
                 reason = self.reason.decode("iso-8859-1")
         else:
             reason = self.reason
-    
+
         if 400 <= self.status_code < 500:
             http_error_msg = (
                 f"{self.status_code} Client Error: {reason} for url: {self.url}"
             )
-    
+
         elif 500 <= self.status_code < 600:
             http_error_msg = (
                 f"{self.status_code} Server Error: {reason} for url: {self.url}"
             )
-    
+
         if http_error_msg:
 >           raise HTTPError(http_error_msg, response=self)
 E           requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: http://localhost:8080/v2/models/densenetonnx/infer
@@ -156,11 +156,11 @@ triton_model_service_account = <ocp_resources.service_account.ServiceAccount obj
             "deployment_mode": params.get("deployment_type", KServeDeploymentType.RAW_DEPLOYMENT),
             "external_route": params.get("enable_external_route", False),
         }
-    
+
         gpu_count = params.get("gpu_count", 0)
         timeout = params.get("timeout")
         min_replicas = params.get("min-replicas")
-    
+
         resources = copy.deepcopy(cast(dict[str, dict[str, str]], PREDICT_RESOURCES["resources"]))
         if gpu_count > 0:
             identifier = Labels.Nvidia.NVIDIA_COM_GPU
@@ -169,17 +169,17 @@ triton_model_service_account = <ocp_resources.service_account.ServiceAccount obj
             service_config["volumes"] = PREDICT_RESOURCES["volumes"]
             service_config["volumes_mounts"] = PREDICT_RESOURCES["volume_mounts"]
         service_config["resources"] = resources
-    
+
         if timeout:
             service_config["timeout"] = timeout
-    
+
         if min_replicas:
             service_config["min_replicas"] = min_replicas
-    
+
 >       with create_isvc(**service_config) as isvc:
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/model_serving/model_runtime/triton/basic_model_deployment/conftest.py:473: 
+tests/model_serving/model_runtime/triton/basic_model_deployment/conftest.py:473:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /usr/lib64/python3.12/contextlib.py:137: in __enter__
     return next(self.gen)
@@ -197,10 +197,10 @@ self = <timeout_sampler.TimeoutSampler object at 0x7fedc8a36ea0>
     def __iter__(self) -> Any:
         """
         Call `func` and yield the result, or raise an exception on timeout.
-    
+
         Yields:
             any: Return value from `func`
-    
+
         Raises:
             TimeoutExpiredError: if `func` takes longer than `wait_timeout` seconds to return a value
         """
@@ -211,12 +211,12 @@ self = <timeout_sampler.TimeoutSampler object at 0x7fedc8a36ea0>
                 f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
                 f" {self.sleep} seconds."
             )
-    
+
             if self.print_func_log:
                 log += f" ({self._func_log})"
-    
+
             LOGGER.info(log)
-    
+
         last_exp = None
         elapsed_time = None
         while timeout_watch.remaining_time() > 0:
@@ -225,23 +225,23 @@ self = <timeout_sampler.TimeoutSampler object at 0x7fedc8a36ea0>
                 yield self.func(*self.func_args, **self.func_kwargs)
                 time.sleep(self.sleep)
                 elapsed_time = None
-    
+
             except Exception as exp:
                 last_exp = exp
                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
-    
+
                 if not self._should_ignore_exception(exp=last_exp):
                     raise TimeoutExpiredError(
                         self._get_exception_log(exp=last_exp), last_exp=last_exp, elapsed_time=elapsed_time
                     )
-    
+
                 time.sleep(self.sleep)
                 elapsed_time = None
-    
+
             finally:
                 if self.print_log and elapsed_time:
                     LOGGER.info(_elapsed_time_log(elapsed_time=elapsed_time))
-    
+
 >       raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 E       timeout_sampler.TimeoutExpiredError: Timed Out: 30
 E       Function: utilities.infra.wait_for_isvc_pods  Kwargs: {'client': <kubernetes.dynamic.client.DynamicClient object at 0x7fedcaa14710>, 'isvc': <ocp_resources.inference_service.InferenceService object at 0x7fedc8a34200>, 'runtime_name': 'triton-grpc-runtime'}
@@ -279,7 +279,7 @@ triton_response_snapshot = SnapshotAssertion(name='snapshot', num_executions=0),
     ) -> None:
         """
         Run inference and validate against snapshot.
-    
+
         Args:
             triton_inference_service: The deployed InferenceService object
             triton_pod_resource: The pod running the model server
@@ -288,7 +288,7 @@ triton_response_snapshot = SnapshotAssertion(name='snapshot', num_executions=0),
             root_dir: Root directory for test execution
         """
         input_query = TRITON_REST_ONNX_INPUT_QUERY if protocol == Protocols.REST else TRITON_GRPC_ONNX_INPUT_QUERY
-    
+
 >       validate_inference_request(
             pod_name=triton_pod_resource.name,
             isvc=triton_inference_service,
@@ -299,7 +299,7 @@ triton_response_snapshot = SnapshotAssertion(name='snapshot', num_executions=0),
             root_dir=root_dir,
         )
 
-tests/model_serving/model_runtime/triton/basic_model_deployment/test_onnx_model.py:118: 
+tests/model_serving/model_runtime/triton/basic_model_deployment/test_onnx_model.py:118:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/model_serving/model_runtime/triton/basic_model_deployment/utils.py:232: in validate_inference_request
     response = run_triton_inference(
@@ -314,7 +314,7 @@ self = <Response [400]>
 
     def raise_for_status(self):
         """Raises :class:`HTTPError`, if one occurred."""
-    
+
         http_error_msg = ""
         if isinstance(self.reason, bytes):
             # We attempt to decode utf-8 first because some servers
@@ -327,17 +327,17 @@ self = <Response [400]>
                 reason = self.reason.decode("iso-8859-1")
         else:
             reason = self.reason
-    
+
         if 400 <= self.status_code < 500:
             http_error_msg = (
                 f"{self.status_code} Client Error: {reason} for url: {self.url}"
             )
-    
+
         elif 500 <= self.status_code < 600:
             http_error_msg = (
                 f"{self.status_code} Server Error: {reason} for url: {self.url}"
             )
-    
+
         if http_error_msg:
 >           raise HTTPError(http_error_msg, response=self)
 E           requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: https://densenetonnx-densenetonnx-serverless-rest.apps.rpanchamgpu-pool-8dxr6.aws.rh-ods.com/v2/models/densenetonnx/infer
@@ -383,11 +383,11 @@ triton_model_service_account = <ocp_resources.service_account.ServiceAccount obj
             "deployment_mode": params.get("deployment_type", KServeDeploymentType.RAW_DEPLOYMENT),
             "external_route": params.get("enable_external_route", False),
         }
-    
+
         gpu_count = params.get("gpu_count", 0)
         timeout = params.get("timeout")
         min_replicas = params.get("min-replicas")
-    
+
         resources = copy.deepcopy(cast(dict[str, dict[str, str]], PREDICT_RESOURCES["resources"]))
         if gpu_count > 0:
             identifier = Labels.Nvidia.NVIDIA_COM_GPU
@@ -396,17 +396,17 @@ triton_model_service_account = <ocp_resources.service_account.ServiceAccount obj
             service_config["volumes"] = PREDICT_RESOURCES["volumes"]
             service_config["volumes_mounts"] = PREDICT_RESOURCES["volume_mounts"]
         service_config["resources"] = resources
-    
+
         if timeout:
             service_config["timeout"] = timeout
-    
+
         if min_replicas:
             service_config["min_replicas"] = min_replicas
-    
+
 >       with create_isvc(**service_config) as isvc:
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/model_serving/model_runtime/triton/basic_model_deployment/conftest.py:473: 
+tests/model_serving/model_runtime/triton/basic_model_deployment/conftest.py:473:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /usr/lib64/python3.12/contextlib.py:137: in __enter__
     return next(self.gen)
@@ -424,10 +424,10 @@ self = <timeout_sampler.TimeoutSampler object at 0x7fedc8913d40>
     def __iter__(self) -> Any:
         """
         Call `func` and yield the result, or raise an exception on timeout.
-    
+
         Yields:
             any: Return value from `func`
-    
+
         Raises:
             TimeoutExpiredError: if `func` takes longer than `wait_timeout` seconds to return a value
         """
@@ -438,12 +438,12 @@ self = <timeout_sampler.TimeoutSampler object at 0x7fedc8913d40>
                 f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
                 f" {self.sleep} seconds."
             )
-    
+
             if self.print_func_log:
                 log += f" ({self._func_log})"
-    
+
             LOGGER.info(log)
-    
+
         last_exp = None
         elapsed_time = None
         while timeout_watch.remaining_time() > 0:
@@ -452,23 +452,23 @@ self = <timeout_sampler.TimeoutSampler object at 0x7fedc8913d40>
                 yield self.func(*self.func_args, **self.func_kwargs)
                 time.sleep(self.sleep)
                 elapsed_time = None
-    
+
             except Exception as exp:
                 last_exp = exp
                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
-    
+
                 if not self._should_ignore_exception(exp=last_exp):
                     raise TimeoutExpiredError(
                         self._get_exception_log(exp=last_exp), last_exp=last_exp, elapsed_time=elapsed_time
                     )
-    
+
                 time.sleep(self.sleep)
                 elapsed_time = None
-    
+
             finally:
                 if self.print_log and elapsed_time:
                     LOGGER.info(_elapsed_time_log(elapsed_time=elapsed_time))
-    
+
 >       raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 E       timeout_sampler.TimeoutExpiredError: Timed Out: 30
 E       Function: utilities.infra.wait_for_isvc_pods  Kwargs: {'client': <kubernetes.dynamic.client.DynamicClient object at 0x7fedcaa14710>, 'isvc': <ocp_resources.inference_service.InferenceService object at 0x7fedc8be9d00>, 'runtime_name': 'triton-grpc-runtime'}

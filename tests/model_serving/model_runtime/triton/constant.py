@@ -16,14 +16,21 @@ TRITON_REST_INPUT_PATH = (
 TRITON_GRPC_INPUT_PATH =(
     "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-gRPC-input.json"
 )
+TRITON_REST_ONNX_INPUT_PATH = (
+    "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-rest-input.json"
+)
+TRITON_GRPC_ONNX_INPUT_PATH =(
+    "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-gRPC-input.json"
+)
 def load_json(path: str) -> dict:
     with open(path, "r") as f:
         return json.load(f)
 
 TRITON_REST_INPUT_QUERY = load_json(TRITON_REST_INPUT_PATH)
-
+TRITON_REST_ONNX_INPUT_QUERY = load_json(TRITON_REST_ONNX_INPUT_PATH)
 TRITON_GRPC_INPUT_QUERY = load_json(TRITON_GRPC_INPUT_PATH)
 
+TRITON_GRPC_ONNX_INPUT_QUERY = load_json(TRITON_GRPC_ONNX_INPUT_PATH)
 
 LOCAL_HOST_URL: str = "http://localhost"
 
@@ -33,7 +40,9 @@ TRITON_GRPC_PORT: int = 9000
 
 TRITON_GRPC_REMOTE_PORT: int = 443
 
-MODEL_PATH_PREFIX: str = "triton_resnet/model_repository"
+MODEL_PATH_PREFIX_RESNET: str = "triton_resnet/model_repository"
+
+MODEL_PATH_PREFIX: str = "triton/model_repository"
 
 PROTO_FILE_PATH: str = "utilities/manifests/common/grpc_predict_v2.proto"
 

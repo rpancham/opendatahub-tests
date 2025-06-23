@@ -1,5 +1,5 @@
 """
-Test module for ResNet50 TensorFlow model served by Triton via KServe.
+Test module for ONNX  model served by Triton via KServe.
 
 Validates inference using REST and gRPC protocols with both raw and serverless deployment modes.
 """
@@ -16,18 +16,20 @@ from tests.model_serving.model_runtime.triton.basic_model_deployment.utils impor
 from tests.model_serving.model_runtime.triton.constant import (
     BASE_RAW_DEPLOYMENT_CONFIG,
     BASE_SERVERLESS_DEPLOYMENT_CONFIG,
-    MODEL_PATH_PREFIX_RESNET,
-    TRITON_GRPC_INPUT_QUERY,
-    TRITON_REST_INPUT_QUERY,
+    MODEL_PATH_PREFIX,
+    TRITON_GRPC_ONNX_INPUT_QUERY,
+    TRITON_REST_ONNX_INPUT_QUERY,
 )
 
 LOGGER = get_logger(name=__name__)
 
-MODEL_NAME = "resnet50"
+MODEL_NAME = "densenet_onnx"
+ONNX_MODEL_LABEL = "densenetonnx"
+
 MODEL_VERSION = "1"
 MODEL_NAME_DICT = {"name": MODEL_NAME}
-# MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}/{MODEL_NAME}"}
-MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX_RESNET}"}
+MODEL_LABEL_DICT = {"name": ONNX_MODEL_LABEL}
+MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}"}
 
 pytestmark = pytest.mark.usefixtures(
     "root_dir", "valid_aws_config", "triton_rest_serving_runtime_template", "triton_grpc_serving_runtime_template"
@@ -38,48 +40,54 @@ pytestmark = pytest.mark.usefixtures(
     [
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": "resnet50-raw-rest"},
+            {"name": f"{ONNX_MODEL_LABEL}-raw-rest"},
             {
                 **BASE_RAW_DEPLOYMENT_CONFIG,
-                **MODEL_NAME_DICT,
+                **MODEL_LABEL_DICT,
             },
             MODEL_STORAGE_URI_DICT,
             BASE_RAW_DEPLOYMENT_CONFIG,
-            id="resnet50-raw-rest-deployment",
+            id=f"{ONNX_MODEL_LABEL}-raw-rest-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
-            {"name": "resnet50-raw-grpc"},
+            {"name": f"{ONNX_MODEL_LABEL}-raw-grpc"},
             {
                 **BASE_RAW_DEPLOYMENT_CONFIG,
-                **MODEL_NAME_DICT,
+                **MODEL_LABEL_DICT,
             },
             MODEL_STORAGE_URI_DICT,
             BASE_RAW_DEPLOYMENT_CONFIG,
-            id="resnet50-raw-grpc-deployment",
+            id=f"{ONNX_MODEL_LABEL}-raw-grpc-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": "resnet50-serverless-rest"},
-            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG, **MODEL_NAME_DICT},
+            {"name": f"{ONNX_MODEL_LABEL}-serverless-rest"},
+            {
+                **BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+                **MODEL_LABEL_DICT,
+            },
             MODEL_STORAGE_URI_DICT,
             BASE_SERVERLESS_DEPLOYMENT_CONFIG,
-            id="resnet50-serverless-rest-deployment",
+            id=f"{ONNX_MODEL_LABEL}-serverless-rest-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
-            {"name": "resnet50-serverless-grpc"},
-            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG, **MODEL_NAME_DICT},
+            {"name": f"{ONNX_MODEL_LABEL}-serverless-grpc"},
+            {
+                **BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+                **MODEL_LABEL_DICT,
+            },
             MODEL_STORAGE_URI_DICT,
             BASE_SERVERLESS_DEPLOYMENT_CONFIG,
-            id="resnet50-serverless-grpc-deployment",
+            id=f"{ONNX_MODEL_LABEL}-serverless-grpc-deployment",
         ),
     ],
     indirect=True,
 )
-class TestResNet50Model:
+class TestdensenetonnxModel:
     """
-    Test class for ResNet50 inference using Triton on KServe.
+    Test class for densenetonnx inference using Triton on KServe.
 
     Covers:
     - REST and gRPC protocols
@@ -87,7 +95,7 @@ class TestResNet50Model:
     - Snapshot validation of inference results
     """
 
-    def test_resnet50_inference(
+    def test_densenetonnx_inference(
         self,
         triton_inference_service: InferenceService,
         triton_pod_resource: Pod,
@@ -105,7 +113,7 @@ class TestResNet50Model:
             protocol: REST or gRPC
             root_dir: Root directory for test execution
         """
-        input_query = TRITON_REST_INPUT_QUERY if protocol == Protocols.REST else TRITON_GRPC_INPUT_QUERY
+        input_query = TRITON_REST_ONNX_INPUT_QUERY if protocol == Protocols.REST else TRITON_GRPC_ONNX_INPUT_QUERY
 
         validate_inference_request(
             pod_name=triton_pod_resource.name,

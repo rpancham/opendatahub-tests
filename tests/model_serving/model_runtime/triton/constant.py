@@ -16,10 +16,10 @@ TRITON_GRPC_INPUT_PATH = (
     "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-gRPC-input.json"
 )
 TRITON_REST_ONNX_INPUT_PATH = (
-    "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-rest-input.json"
+    "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-onnx-rest-input.json"
 )
 TRITON_GRPC_ONNX_INPUT_PATH = (
-    "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-resnet-gRPC-input.json"
+    "tests/model_serving/model_runtime/triton/basic_model_deployment/kserve-triton-onnx-gRPC-input.json"
 )
 
 

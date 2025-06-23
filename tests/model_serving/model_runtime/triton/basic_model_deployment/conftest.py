@@ -375,31 +375,23 @@ def root_dir(pytestconfig: pytest.Config) -> Any:
 @pytest.fixture(scope="class")
 def triton_grpc_serving_runtime_template(admin_client: DynamicClient) -> Generator[Template, None, None]:
     grpc_template_yaml = TEMPLATE_FILE_PATH.get(Protocols.GRPC)
-    template = Template(
+    with Template(
         client=admin_client,
         yaml_file=grpc_template_yaml,
         namespace=py_config["applications_namespace"],
-    )
-
-    if not template.exists:
-        template.create()
-
-    yield template
+    ) as template:
+        yield template
 
 
 @pytest.fixture(scope="class")
 def triton_rest_serving_runtime_template(admin_client: DynamicClient) -> Generator[Template, None, None]:
     rest_template_yaml = TEMPLATE_FILE_PATH.get(Protocols.REST)
-    template = Template(
+    with Template(
         client=admin_client,
         yaml_file=rest_template_yaml,
         namespace=py_config["applications_namespace"],
-    )
-
-    if not template.exists:
-        template.create()
-
-    yield template
+    ) as template:
+        yield template
 
 
 @pytest.fixture(scope="class")

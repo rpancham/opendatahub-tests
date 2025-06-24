@@ -25,10 +25,10 @@ LOGGER = get_logger(name=__name__)
 
 MODEL_NAME = "densenet_onnx"
 ONNX_MODEL_LABEL = "densenetonnx"
-
 MODEL_VERSION = "1"
 MODEL_NAME_DICT = {"name": MODEL_NAME}
 MODEL_LABEL_DICT = {"name": ONNX_MODEL_LABEL}
+
 MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}"}
 
 pytestmark = pytest.mark.usefixtures(
@@ -41,47 +41,41 @@ pytestmark = pytest.mark.usefixtures(
     [
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": f"{ONNX_MODEL_LABEL}-raw-rest"},
+            {"name": "densenetonnx-raw-rest"},
             {
                 **BASE_RAW_DEPLOYMENT_CONFIG,
                 **MODEL_LABEL_DICT,
             },
             MODEL_STORAGE_URI_DICT,
             BASE_RAW_DEPLOYMENT_CONFIG,
-            id=f"{ONNX_MODEL_LABEL}-raw-rest-deployment",
+            id="densenetonnx-raw-rest-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
-            {"name": f"{ONNX_MODEL_LABEL}-raw-grpc"},
+            {"name": "densenetonnx-raw-grpc"},
             {
                 **BASE_RAW_DEPLOYMENT_CONFIG,
                 **MODEL_LABEL_DICT,
             },
             MODEL_STORAGE_URI_DICT,
             BASE_RAW_DEPLOYMENT_CONFIG,
-            id=f"{ONNX_MODEL_LABEL}-raw-grpc-deployment",
+            id="densenetonnx-raw-grpc-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": f"{ONNX_MODEL_LABEL}-serverless-rest"},
-            {
-                **BASE_SERVERLESS_DEPLOYMENT_CONFIG,
-                **MODEL_LABEL_DICT,
-            },
+            {"name": "densenetonnx-serverless-rest"},
+            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG, **MODEL_LABEL_DICT},
             MODEL_STORAGE_URI_DICT,
             BASE_SERVERLESS_DEPLOYMENT_CONFIG,
-            id=f"{ONNX_MODEL_LABEL}-serverless-rest-deployment",
+            id="densenetonnx-serverless-rest-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
-            {"name": f"{ONNX_MODEL_LABEL}-serverless-grpc"},
-            {
-                **BASE_SERVERLESS_DEPLOYMENT_CONFIG,
-                **MODEL_LABEL_DICT,
-            },
+            {"name": "densenetonnx-serverless-grpc"},
+            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG, **MODEL_LABEL_DICT},
             MODEL_STORAGE_URI_DICT,
             BASE_SERVERLESS_DEPLOYMENT_CONFIG,
-            id=f"{ONNX_MODEL_LABEL}-serverless-grpc-deployment",
+            id="densenetonnx-serverless-grpc-deployment",
         ),
     ],
     indirect=True,

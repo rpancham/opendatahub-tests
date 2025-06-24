@@ -16,7 +16,7 @@ from tests.model_serving.model_runtime.triton.basic_model_deployment.utils impor
 from tests.model_serving.model_runtime.triton.constant import (
     BASE_RAW_DEPLOYMENT_CONFIG,
     BASE_SERVERLESS_DEPLOYMENT_CONFIG,
-    MODEL_PATH_PREFIX_RESNET,
+    MODEL_PATH_PREFIX,
     TRITON_GRPC_INPUT_QUERY,
     TRITON_REST_INPUT_QUERY,
 )
@@ -26,8 +26,7 @@ LOGGER = get_logger(name=__name__)
 MODEL_NAME = "resnet50"
 MODEL_VERSION = "1"
 MODEL_NAME_DICT = {"name": MODEL_NAME}
-# MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}/{MODEL_NAME}"}
-MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX_RESNET}"}
+MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}"}
 
 pytestmark = pytest.mark.usefixtures(
     "root_dir", "valid_aws_config", "triton_rest_serving_runtime_template", "triton_grpc_serving_runtime_template"

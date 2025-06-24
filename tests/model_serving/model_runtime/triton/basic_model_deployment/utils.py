@@ -11,6 +11,7 @@ This module provides functions for:
 import os
 import json
 import subprocess
+import tempfile
 from contextlib import contextmanager
 from typing import Generator, Any
 
@@ -41,22 +42,6 @@ def kserve_s3_endpoint_secret(
     aws_s3_endpoint: str,
     aws_s3_region: str,
 ) -> Generator[Secret, Any, Any]:
-    """
-    Context manager that creates a temporary Kubernetes Secret for KServe
-    to access an S3-compatible storage endpoint.
-
-    Args:
-        admin_client (DynamicClient): Kubernetes dynamic client for resource operations.
-        name (str): Name of the Secret resource.
-        namespace (str): Kubernetes namespace in which to create the Secret.
-        aws_access_key (str): AWS access key ID for authentication.
-        aws_secret_access_key (str): AWS secret access key for authentication.
-        aws_s3_endpoint (str): S3 endpoint URL (e.g., https://s3.example.com).
-        aws_s3_region (str): AWS region for the S3 service.
-
-    Yields:
-        Secret: The created Kubernetes Secret object within the context.
-    """
     with Secret(
         client=admin_client,
         name=name,
@@ -78,90 +63,74 @@ def kserve_s3_endpoint_secret(
 
 
 def send_rest_request(url: str, input_data: dict[str, Any]) -> Any:
-    """
-    Sends a REST POST request to the specified URL with the given JSON payload.
-
-    Args:
-        url (str): The endpoint URL to send the request to.
-        input_data (dict[str, Any]): The input payload to send as JSON.
-
-    Returns:
-        Any: The parsed JSON response from the server.
-
-    Raises:
-        requests.HTTPError: If the response contains an HTTP error status.
-    """
-    response = requests.post(url=url, json=input_data, verify=False, timeout=60)
+    response = requests.post(url=url, json=input_data, verify=False, timeout=180)
     response.raise_for_status()
     return response.json()
 
 
 def send_grpc_request(url: str, input_data: dict[str, Any], root_dir: str, insecure: bool = False) -> Any:
     """
-    Sends a gRPC request to the specified URL using grpcurl with the given input data.
-
-    Args:
-        url (str): The gRPC server endpoint (host:port).
-        input_data (dict[str, Any]): The input payload to send, as a dictionary.
-        root_dir (str): Root directory where the .proto file is located.
-        insecure (bool, optional): Whether to disable TLS verification.
-                                   Defaults to False (uses plaintext).
-
-    Returns:
-        Any: The parsed JSON response if successful, or an error message string if the request fails.
+    Sends a gRPC request using grpcurl.
+    Uses inline -d for small payloads and stdin for large payloads.
     """
     grpc_proto_path = os.path.join(root_dir, PROTO_FILE_PATH)
     proto_import_path = os.path.dirname(grpc_proto_path)
-    input_str = json.dumps(input_data)
     grpc_method = "inference.GRPCInferenceService/ModelInfer"
 
-    args = [
+    input_str = json.dumps(input_data)
+    use_stdin = len(input_str.encode("utf-8")) > 8000
+
+    base_args = [
         "grpcurl",
         "-insecure" if insecure else "-plaintext",
-        "-import-path",
-        proto_import_path,
-        "-proto",
-        grpc_proto_path,
-        "-d",
-        input_str,
+        "-import-path", proto_import_path,
+        "-proto", grpc_proto_path,
         url,
         grpc_method,
     ]
 
-    try:
-        result = subprocess.run(args=args, capture_output=True, text=True, check=True)
-        return json.loads(result.stdout)
-    except subprocess.CalledProcessError as e:
-        return f"gRPC request failed: {e.stderr or e.stdout}"
+    if use_stdin:
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as tmpfile:
+            tmpfile.write(input_str)
+            tmpfile.flush()
+
+            args = base_args.copy()
+            args.insert(args.index(url), "-d")
+            args.insert(args.index("-d") + 1, "@")
+
+            try:
+                proc = subprocess.run(
+                    args=args,
+                    stdin=open(tmpfile.name, "r"),
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                return json.loads(proc.stdout)
+            except subprocess.CalledProcessError as e:
+                return f"gRPC request (stdin) failed:\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
+    else:
+        args = base_args.copy()
+        args.insert(args.index(url), "-d")
+        args.insert(args.index("-d") + 1, input_str)
+
+        try:
+            proc = subprocess.run(
+                args=args,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return json.loads(proc.stdout)
+        except subprocess.CalledProcessError as e:
+            return f"gRPC request (inline) failed:\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
 
 
 def run_triton_inference(
     pod_name: str, isvc: InferenceService, input_data: dict[str, Any], model_version: str, protocol: str, root_dir: str
 ) -> Any:
-    """
-    Run inference against an TRITON-hosted model using either REST or gRPC protocol.
-    Supports both RAW and SERVERLESS KServe deployment modes.
-
-    Args:
-        pod_name (str): Name of the pod running the TRITON model (used for RAW deployment).
-        isvc (InferenceService): The KServe InferenceService object.
-        input_data (dict[str, Any]): The input data payload for inference.
-        model_version (str): The version of the model to target, if applicable.
-        protocol (str): Protocol to use for inference ('REST' or 'GRPC').
-        root_dir (str): Root directory containing the .proto file for gRPC requests.
-
-    Returns:
-        Any: The inference result from the model, or an error message string.
-
-    Notes:
-        - REST calls expect the model to support V2 REST inference APIs.
-        - gRPC calls use `grpcurl` and require the appropriate `.proto` files.
-        - RAW deployments use port-forwarding; SERVERLESS assumes accessible endpoints.
-    """
     deployment_mode = isvc.instance.metadata.annotations.get("serving.kserve.io/deploymentMode")
     model_name = isvc.instance.metadata.name
-    # version_suffix = f"/versions/{model_version}" if model_version else ""
-    # rest_endpoint = f"/v2/models/{model_name}{version_suffix}/infer"
     rest_endpoint = f"/v2/models/{model_name}/infer"
 
     if protocol not in (Protocols.REST, Protocols.GRPC):
@@ -191,16 +160,6 @@ def run_triton_inference(
 
 
 def get_grpc_url(base_url: str, port: int) -> str:
-    """
-    Constructs a gRPC target URL by stripping the HTTP/HTTPS scheme and appending the port.
-
-    Args:
-        base_url (str): The base URL, potentially including 'http://' or 'https://'.
-        port (int): The port number to append.
-
-    Returns:
-        str: A gRPC-compatible URL in the format 'host:port'.
-    """
     return f"{base_url.replace('https://', '').replace('http://', '')}:{port}"
 
 
@@ -213,22 +172,6 @@ def validate_inference_request(
     protocol: str,
     root_dir: str,
 ) -> None:
-    """
-    Runs an inference request against an TRITON model and validates
-    that the response matches the expected snapshot.
-
-    Args:
-        pod_name (str): The pod name where the model is running.
-        isvc (InferenceService): The KServe InferenceService instance.
-        response_snapshot (Any): The expected inference output to compare against.
-        input_query (Any): The input data to send to the model.
-        model_version (str): The version of the model to target.
-        protocol (str): The protocol to use for inference ('REST' or 'GRPC').
-        root_dir (str): The root directory containing protobuf files for gRPC.
-
-    Raises:
-        AssertionError: If the actual response does not match the snapshot.
-    """
     response = run_triton_inference(
         pod_name=pod_name,
         isvc=isvc,

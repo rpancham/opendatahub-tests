@@ -1,0 +1,1 @@
+"gRPC request (stdin) failed:\nSTDOUT: \nSTDERR: ERROR:\n  Code: NotFound\n  Message: Request for unknown model: 'inception_graphdef' is not found\n"

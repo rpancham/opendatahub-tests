@@ -83,8 +83,10 @@ def send_grpc_request(url: str, input_data: dict[str, Any], root_dir: str, insec
     base_args = [
         "grpcurl",
         "-insecure" if insecure else "-plaintext",
-        "-import-path", proto_import_path,
-        "-proto", grpc_proto_path,
+        "-import-path",
+        proto_import_path,
+        "-proto",
+        grpc_proto_path,
         url,
         grpc_method,
     ]
@@ -99,16 +101,19 @@ def send_grpc_request(url: str, input_data: dict[str, Any], root_dir: str, insec
             args.insert(args.index("-d") + 1, "@")
 
             try:
-                proc = subprocess.run(
-                    args=args,
-                    stdin=open(tmpfile.name, "r"),
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
+                with open(tmpfile.name, "r") as f:
+                    proc = subprocess.run(
+                        args=args,
+                        stdin=f,
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
                 return json.loads(proc.stdout)
             except subprocess.CalledProcessError as e:
                 return f"gRPC request (stdin) failed:\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
+            finally:
+                os.unlink(tmpfile.name)
     else:
         args = base_args.copy()
         args.insert(args.index(url), "-d")

@@ -17,10 +17,13 @@ from _pytest.fixtures import SubRequest
 from tests.model_serving.model_runtime.triton.constant import (
     PREDICT_RESOURCES,
     RUNTIME_MAP,
-    TEMPLATE_MAP,
     TEMPLATE_FILE_PATH,
 )
-from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import kserve_s3_endpoint_secret
+from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import (
+    kserve_s3_endpoint_secret,
+    get_template_name,
+    get_accelerator_label,
+)
 
 from utilities.constants import (
     KServeDeploymentType,
@@ -40,6 +43,11 @@ LOGGER = get_logger(name=__name__)
 @pytest.fixture(scope="session")
 def root_dir(pytestconfig: pytest.Config) -> Any:
     return pytestconfig.rootpath
+
+
+@pytest.fixture(scope="session")
+def supported_accelerator_type(pytestconfig: pytest.Config) -> str:
+    return py_config.get("accelerator_type", "nvidia")  # Default to NVIDIA
 
 
 @pytest.fixture(scope="class")
@@ -76,8 +84,9 @@ def triton_serving_runtime(
     model_namespace: Namespace,
     triton_runtime_image: str,
     protocol: str,
+    supported_accelerator_type: str,
 ) -> Generator[ServingRuntime, None, None]:
-    template_name = TEMPLATE_MAP.get(protocol, RuntimeTemplates.TRITON_REST)
+    template_name = get_template_name(protocol, supported_accelerator_type)
     with ServingRuntimeFromTemplate(
         client=admin_client,
         name=RUNTIME_MAP.get(protocol, "triton-runtime"),
@@ -97,6 +106,7 @@ def triton_inference_service(
     triton_serving_runtime: ServingRuntime,
     s3_models_storage_uri: str,
     triton_model_service_account: ServiceAccount,
+    supported_accelerator_type: str,
 ) -> Generator[InferenceService, Any, Any]:
     params = request.param
     service_config = {
@@ -117,11 +127,12 @@ def triton_inference_service(
 
     resources = copy.deepcopy(cast(dict[str, dict[str, str]], PREDICT_RESOURCES["resources"]))
     if gpu_count > 0:
-        identifier = Labels.Nvidia.NVIDIA_COM_GPU
+        identifier = get_accelerator_label(supported_accelerator_type)
         resources["requests"][identifier] = gpu_count
         resources["limits"][identifier] = gpu_count
-        service_config["volumes"] = PREDICT_RESOURCES["volumes"]
-        service_config["volumes_mounts"] = PREDICT_RESOURCES["volume_mounts"]
+        if gpu_count > 1:
+            service_config["volumes"] = PREDICT_RESOURCES["volumes"]
+            service_config["volumes_mounts"] = PREDICT_RESOURCES["volume_mounts"]
     service_config["resources"] = resources
 
     if timeout:
@@ -184,10 +195,6 @@ def triton_pod_resource(
 
 @pytest.fixture(autouse=True)
 def cleanup_existing_isvc(request: SubRequest, admin_client: DynamicClient, model_namespace: Namespace) -> None:
-    """
-    Deletes any existing InferenceService with the same name before the test runs
-    to avoid ConflictError (409) from Kubernetes.
-    """
     test_name = request.node.callspec.id if hasattr(request.node, "callspec") else None
     if test_name:
         try:

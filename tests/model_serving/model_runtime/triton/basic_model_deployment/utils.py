@@ -186,3 +186,22 @@ def validate_inference_request(
         root_dir=root_dir,
     )
     assert response == response_snapshot, f"Output mismatch: {response} != {response_snapshot}"
+
+from tests.model_serving.model_runtime.triton.constant import ACCELERATOR_IDENTIFIER, TEMPLATE_MAP
+from utilities.constants import Labels, RuntimeTemplates
+
+
+def get_accelerator_label(accelerator_type: str) -> str:
+    """
+    Maps accelerator type to Kubernetes GPU identifier. Defaults to NVIDIA.
+    """
+    return ACCELERATOR_IDENTIFIER.get(accelerator_type.lower(), Labels.Nvidia.NVIDIA_COM_GPU)
+
+
+def get_template_name(protocol: str, accelerator_type: str) -> str:
+    """
+    Returns template name based on protocol and accelerator type.
+    Falls back to default TRITON_REST if not found.
+    """
+    key = f"{protocol.lower()}_{accelerator_type.lower()}"
+    return TEMPLATE_MAP.get(key, RuntimeTemplates.TRITON_REST)

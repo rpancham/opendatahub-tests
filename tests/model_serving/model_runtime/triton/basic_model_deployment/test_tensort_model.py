@@ -1,5 +1,5 @@
 """
-Test module for FIL (XGBoost) model served by Triton via KServe.
+Test module for ResNet50 model served by Triton via KServe.
 
 Validates inference using REST and gRPC protocols with both raw and serverless deployment modes.
 """

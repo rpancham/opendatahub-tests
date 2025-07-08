@@ -187,6 +187,7 @@ def validate_inference_request(
     )
     assert response == response_snapshot, f"Output mismatch: {response} != {response_snapshot}"
 
+
 from tests.model_serving.model_runtime.triton.constant import ACCELERATOR_IDENTIFIER, TEMPLATE_MAP
 from utilities.constants import Labels, RuntimeTemplates
 

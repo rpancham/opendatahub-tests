@@ -227,7 +227,8 @@ def triton_runtime_image(pytestconfig: pytest.Config) -> str | None:
     if not runtime_image:
         return None
     return runtime_image
-  
+
+
 @pytest.fixture(scope="session")
 def mlserver_runtime_image(pytestconfig: pytest.Config) -> str | None:
     runtime_image = pytestconfig.option.mlserver_runtime_image

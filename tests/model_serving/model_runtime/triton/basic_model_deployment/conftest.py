@@ -27,8 +27,6 @@ from tests.model_serving.model_runtime.triton.basic_model_deployment.utils impor
 
 from utilities.constants import (
     KServeDeploymentType,
-    Labels,
-    RuntimeTemplates,
     Protocols,
 )
 from utilities.inference_utils import create_isvc

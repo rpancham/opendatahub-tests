@@ -64,10 +64,10 @@ def triton_rest_serving_runtime_template(admin_client: DynamicClient) -> Generat
 @contextmanager
 def create_triton_template(admin_client: DynamicClient, protocol: str) -> Generator[Template, Any, Any]:
     with Template(
-            client=admin_client,
-            name=f"triton-{protocol}-runtime-template",
-            namespace=py_config["applications_namespace"],
-            objects=[create_triton_serving_runtime(protocol=protocol)],
+        client=admin_client,
+        name=f"triton-{protocol}-runtime-template",
+        namespace=py_config["applications_namespace"],
+        objects=[create_triton_serving_runtime(protocol=protocol)],
     ) as template:
         yield template
 
@@ -76,22 +76,13 @@ def create_triton_serving_runtime(protocol: str) -> ServingRuntime:
     volumes = []
     volume_mounts = []
     if protocol == Protocols.GRPC:
-        volumes.append({
-            "name": "shm",
-            "emptyDir": {
-                "medium": "Memory",
-                "sizeLimit": "2Gi"
-            }
-        })
-        volume_mounts.append({
-            "name": "shm",
-            "mountPath": "/dev/shm"
-        })
+        volumes.append({"name": "shm", "emptyDir": {"medium": "Memory", "sizeLimit": "2Gi"}})
+        volume_mounts.append({"name": "shm", "mountPath": "/dev/shm"})
 
     port_config = {
         "name": "h2c" if protocol == Protocols.GRPC else "http1",
         "containerPort": 9000 if protocol == Protocols.GRPC else 8080,
-        "protocol": "TCP"
+        "protocol": "TCP",
     }
 
     container_args = [
@@ -141,7 +132,7 @@ def create_triton_serving_runtime(protocol: str) -> ServingRuntime:
         containers=kserve_container,
         volumes=volumes,
         protocol_versions=["v2", "grpc-v2"],
-        supported_model_formats=supported_model_formats
+        supported_model_formats=supported_model_formats,
     )
 
 
@@ -152,34 +143,34 @@ def protocol(request: pytest.FixtureRequest) -> str:
 
 @pytest.fixture(scope="class")
 def triton_serving_runtime(
-        request: pytest.FixtureRequest,
-        admin_client: DynamicClient,
-        model_namespace: Namespace,
-        triton_runtime_image: str,
-        protocol: str,
-        supported_accelerator_type: str,
+    request: pytest.FixtureRequest,
+    admin_client: DynamicClient,
+    model_namespace: Namespace,
+    triton_runtime_image: str,
+    protocol: str,
+    supported_accelerator_type: str,
 ) -> Generator[ServingRuntime, None, None]:
     template_name = get_template_name(protocol, supported_accelerator_type)
     with ServingRuntimeFromTemplate(
-            client=admin_client,
-            name=RUNTIME_MAP.get(protocol, "triton-runtime"),
-            namespace=model_namespace.name,
-            template_name=template_name,
-            deployment_type=request.param["deployment_type"],
-            runtime_image=triton_runtime_image,
+        client=admin_client,
+        name=RUNTIME_MAP.get(protocol, "triton-runtime"),
+        namespace=model_namespace.name,
+        template_name=template_name,
+        deployment_type=request.param["deployment_type"],
+        runtime_image=triton_runtime_image,
     ) as model_runtime:
         yield model_runtime
 
 
 @pytest.fixture(scope="class")
 def triton_inference_service(
-        request: pytest.FixtureRequest,
-        admin_client: DynamicClient,
-        model_namespace: Namespace,
-        triton_serving_runtime: ServingRuntime,
-        s3_models_storage_uri: str,
-        triton_model_service_account: ServiceAccount,
-        supported_accelerator_type: str,
+    request: pytest.FixtureRequest,
+    admin_client: DynamicClient,
+    model_namespace: Namespace,
+    triton_serving_runtime: ServingRuntime,
+    s3_models_storage_uri: str,
+    triton_model_service_account: ServiceAccount,
+    supported_accelerator_type: str,
 ) -> Generator[InferenceService, Any, Any]:
     params = request.param
     model_format = params.get(
@@ -221,33 +212,35 @@ def triton_inference_service(
 
 
 @pytest.fixture(scope="class")
-def triton_model_service_account(admin_client: DynamicClient, kserve_s3_secret: Secret) -> Generator[ServiceAccount, None, None]:
+def triton_model_service_account(
+    admin_client: DynamicClient, kserve_s3_secret: Secret
+) -> Generator[ServiceAccount, None, None]:
     with ServiceAccount(
-            client=admin_client,
-            namespace=kserve_s3_secret.namespace,
-            name="triton-models-bucket-sa",
-            secrets=[{"name": kserve_s3_secret.name}],
+        client=admin_client,
+        namespace=kserve_s3_secret.namespace,
+        name="triton-models-bucket-sa",
+        secrets=[{"name": kserve_s3_secret.name}],
     ) as sa:
         yield sa
 
 
 @pytest.fixture(scope="class")
 def kserve_s3_secret(
-        admin_client: DynamicClient,
-        model_namespace: Namespace,
-        aws_access_key_id: str,
-        aws_secret_access_key: str,
-        models_s3_bucket_region: str,
-        models_s3_bucket_endpoint: str,
+    admin_client: DynamicClient,
+    model_namespace: Namespace,
+    aws_access_key_id: str,
+    aws_secret_access_key: str,
+    models_s3_bucket_region: str,
+    models_s3_bucket_endpoint: str,
 ) -> Generator[Secret, None, None]:
     with kserve_s3_endpoint_secret(
-            admin_client=admin_client,
-            name="triton-models-bucket-secret",
-            namespace=model_namespace.name,
-            aws_access_key=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
-            aws_s3_region=models_s3_bucket_region,
-            aws_s3_endpoint=models_s3_bucket_endpoint,
+        admin_client=admin_client,
+        name="triton-models-bucket-secret",
+        namespace=model_namespace.name,
+        aws_access_key=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        aws_s3_region=models_s3_bucket_region,
+        aws_s3_endpoint=models_s3_bucket_endpoint,
     ) as secret:
         yield secret
 
@@ -259,8 +252,8 @@ def triton_response_snapshot(snapshot: Any) -> Any:
 
 @pytest.fixture
 def triton_pod_resource(
-        admin_client: DynamicClient,
-        triton_inference_service: InferenceService,
+    admin_client: DynamicClient,
+    triton_inference_service: InferenceService,
 ) -> Pod:
     pods = get_pods_by_isvc_label(client=admin_client, isvc=triton_inference_service)
     if not pods:

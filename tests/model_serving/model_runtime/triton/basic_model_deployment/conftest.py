@@ -212,7 +212,9 @@ def triton_inference_service(
 
 
 @pytest.fixture(scope="class")
-def triton_model_service_account(admin_client: DynamicClient, kserve_s3_secret: Secret) -> Generator[ServiceAccount, None, None]:
+def triton_model_service_account(
+    admin_client: DynamicClient, kserve_s3_secret: Secret
+) -> Generator[ServiceAccount, None, None]:
     with ServiceAccount(
         client=admin_client,
         namespace=kserve_s3_secret.namespace,

@@ -134,10 +134,9 @@ def send_grpc_request(url: str, input_data: dict[str, Any], root_dir: str, insec
 
 
 def run_triton_inference(
-    pod_name: str, isvc: InferenceService, input_data: dict[str, Any], model_version: str, protocol: str, root_dir: str
+    pod_name: str, isvc: InferenceService, input_data: dict[str, Any], model_name: str, protocol: str, root_dir: str
 ) -> Any:
     deployment_mode = isvc.instance.metadata.annotations.get("serving.kserve.io/deploymentMode")
-    model_name = isvc.instance.metadata.name
     rest_endpoint = f"/v2/models/{model_name}/infer"
 
     if protocol not in (Protocols.REST, Protocols.GRPC):
@@ -175,7 +174,7 @@ def validate_inference_request(
     isvc: InferenceService,
     response_snapshot: Any,
     input_query: Any,
-    model_version: str,
+    model_name: str,
     protocol: str,
     root_dir: str,
 ) -> None:
@@ -183,7 +182,7 @@ def validate_inference_request(
         pod_name=pod_name,
         isvc=isvc,
         input_data=input_query,
-        model_version=model_version,
+        model_name=model_name,
         protocol=protocol,
         root_dir=root_dir,
     )
@@ -194,13 +193,6 @@ def get_gpu_identifier(accelerator_type: str) -> str:
     return ACCELERATOR_IDENTIFIER.get(accelerator_type.lower(), Labels.Nvidia.NVIDIA_COM_GPU)
 
 
-def get_accelerator_label(accelerator_type: str) -> str:
-    """
-    Maps accelerator type to Kubernetes GPU identifier. Defaults to NVIDIA.
-    """
-    return ACCELERATOR_IDENTIFIER.get(accelerator_type.lower(), Labels.Nvidia.NVIDIA_COM_GPU)
-
-
 def get_template_name(protocol: str, accelerator_type: str) -> str:
     """
     Returns template name based on protocol and accelerator type.
@@ -208,3 +200,8 @@ def get_template_name(protocol: str, accelerator_type: str) -> str:
     """
     key = f"{protocol.lower()}_{accelerator_type.lower()}"
     return TEMPLATE_MAP.get(key, RuntimeTemplates.TRITON_REST)
+
+
+def load_json(path: str) -> dict[str, Any]:
+    with open(path, "r") as f:
+        return json.load(f)

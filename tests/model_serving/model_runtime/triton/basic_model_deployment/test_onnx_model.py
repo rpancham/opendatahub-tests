@@ -12,22 +12,18 @@ from ocp_resources.pod import Pod
 from simple_logger.logger import get_logger
 
 from utilities.constants import Protocols
-from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import validate_inference_request
+from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import validate_inference_request, load_json
 from tests.model_serving.model_runtime.triton.constant import (
     BASE_RAW_DEPLOYMENT_CONFIG,
     BASE_SERVERLESS_DEPLOYMENT_CONFIG,
     MODEL_PATH_PREFIX,
-    TRITON_GRPC_ONNX_INPUT_QUERY,
-    TRITON_REST_ONNX_INPUT_QUERY,
+    TRITON_GRPC_ONNX_INPUT_PATH,
+    TRITON_REST_ONNX_INPUT_PATH,
 )
 
 LOGGER = get_logger(name=__name__)
 
-MODEL_NAME = "densenet_onnx"
-ONNX_MODEL_LABEL = "densenetonnx"
-MODEL_VERSION = "1"
-MODEL_NAME_DICT = {"name": MODEL_NAME}
-MODEL_LABEL_DICT = {"name": ONNX_MODEL_LABEL}
+ONNX_MODEL_NAME = "densenetonnx"
 
 MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}"}
 
@@ -37,52 +33,58 @@ pytestmark = pytest.mark.usefixtures(
 
 
 @pytest.mark.parametrize(
-    ("protocol", "model_namespace", "triton_inference_service", "s3_models_storage_uri", "triton_serving_runtime"),
+    ("protocol", "model_namespace", "s3_models_storage_uri", "triton_serving_runtime", "triton_inference_service"),
     [
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": "densenetonnx-raw-rest"},
-            {
-                **BASE_RAW_DEPLOYMENT_CONFIG,
-                **MODEL_LABEL_DICT,
-            },
+            {"name": "onnx-raw"},
             MODEL_STORAGE_URI_DICT,
-            BASE_RAW_DEPLOYMENT_CONFIG,
+            {**BASE_RAW_DEPLOYMENT_CONFIG},
+            {
+                "name": "densenetonnx-raw-rest",
+                **BASE_RAW_DEPLOYMENT_CONFIG,
+            },
             id="densenetonnx-raw-rest-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
-            {"name": "densenetonnx-raw-grpc"},
-            {
-                **BASE_RAW_DEPLOYMENT_CONFIG,
-                **MODEL_LABEL_DICT,
-            },
+            {"name": "onnx-raw"},
             MODEL_STORAGE_URI_DICT,
-            BASE_RAW_DEPLOYMENT_CONFIG,
+            {**BASE_RAW_DEPLOYMENT_CONFIG},
+            {
+                "name": "densenetonnx-raw-grpc",
+                **BASE_RAW_DEPLOYMENT_CONFIG,
+            },
             id="densenetonnx-raw-grpc-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": "densenetonnx-serverless-rest"},
-            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG, **MODEL_LABEL_DICT},
+            {"name": "onnx-serverless"},
             MODEL_STORAGE_URI_DICT,
-            BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG},
+            {
+                "name": "densenetonnx-serverless-rest",
+                **BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+            },
             id="densenetonnx-serverless-rest-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
-            {"name": "densenetonnx-serverless-grpc"},
-            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG, **MODEL_LABEL_DICT},
+            {"name": "onnx-serverless"},
             MODEL_STORAGE_URI_DICT,
-            BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+            {**BASE_SERVERLESS_DEPLOYMENT_CONFIG},
+            {
+                "name": "densenetonnx-serverless-grpc",
+                **BASE_SERVERLESS_DEPLOYMENT_CONFIG,
+            },
             id="densenetonnx-serverless-grpc-deployment",
         ),
     ],
     indirect=True,
 )
-class TestdensenetonnxModel:
+class TestonnxModel:
     """
-    Test class for densenetonnx inference using Triton on KServe.
+    Test class for onnx inference using Triton on KServe.
 
     Covers:
     - REST and gRPC protocols
@@ -90,7 +92,7 @@ class TestdensenetonnxModel:
     - Snapshot validation of inference results
     """
 
-    def test_densenetonnx_inference(
+    def test_onnx_inference(
         self,
         triton_inference_service: InferenceService,
         triton_pod_resource: Pod,
@@ -108,14 +110,15 @@ class TestdensenetonnxModel:
             protocol: REST or gRPC
             root_dir: Root directory for test execution
         """
-        input_query = TRITON_REST_ONNX_INPUT_QUERY if protocol == Protocols.REST else TRITON_GRPC_ONNX_INPUT_QUERY
+        input_path = TRITON_GRPC_ONNX_INPUT_PATH if protocol == Protocols.GRPC else TRITON_REST_ONNX_INPUT_PATH
+        input_query = load_json(path=input_path)
 
         validate_inference_request(
             pod_name=triton_pod_resource.name,
             isvc=triton_inference_service,
             response_snapshot=triton_response_snapshot,
             input_query=input_query,
-            model_version=MODEL_VERSION,
+            model_name=ONNX_MODEL_NAME,
             protocol=protocol,
             root_dir=root_dir,
         )

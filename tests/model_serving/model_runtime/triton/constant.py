@@ -1,7 +1,6 @@
 import os
 from typing import Any, Union
 
-from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import load_json
 from utilities.constants import (
     KServeDeploymentType,
     Protocols,
@@ -14,10 +13,6 @@ TRITON_INPUT_BASE_PATH = "tests/model_serving/model_runtime/triton/basic_model_d
 
 TRITON_REST_ONNX_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-onnx-rest-input.json")
 TRITON_GRPC_ONNX_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-onnx-gRPC-input.json")
-
-
-TRITON_REST_ONNX_INPUT_QUERY = load_json(path=TRITON_REST_ONNX_INPUT_PATH)
-TRITON_GRPC_ONNX_INPUT_QUERY = load_json(path=TRITON_GRPC_ONNX_INPUT_PATH)
 
 LOCAL_HOST_URL: str = "http://localhost"
 TRITON_REST_PORT: int = 8080

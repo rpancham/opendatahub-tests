@@ -12,13 +12,13 @@ from ocp_resources.pod import Pod
 from simple_logger.logger import get_logger
 
 from utilities.constants import Protocols
-from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import validate_inference_request
+from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import validate_inference_request, load_json
 from tests.model_serving.model_runtime.triton.constant import (
     BASE_RAW_DEPLOYMENT_CONFIG,
     BASE_SERVERLESS_DEPLOYMENT_CONFIG,
     MODEL_PATH_PREFIX,
-    TRITON_GRPC_ONNX_INPUT_QUERY,
-    TRITON_REST_ONNX_INPUT_QUERY,
+    TRITON_GRPC_ONNX_INPUT_PATH,
+    TRITON_REST_ONNX_INPUT_PATH,
 )
 
 LOGGER = get_logger(name=__name__)
@@ -108,7 +108,8 @@ class TestdensenetonnxModel:
             protocol: REST or gRPC
             root_dir: Root directory for test execution
         """
-        input_query = TRITON_REST_ONNX_INPUT_QUERY if protocol == Protocols.REST else TRITON_GRPC_ONNX_INPUT_QUERY
+        input_path = TRITON_GRPC_ONNX_INPUT_PATH if protocol == Protocols.GRPC else TRITON_REST_ONNX_INPUT_PATH
+        input_query = load_json(path=input_path)
 
         validate_inference_request(
             pod_name=triton_pod_resource.name,

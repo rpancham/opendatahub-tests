@@ -242,7 +242,7 @@ class RunTimeConfigs:
 class ModelCarImage:
     MNIST_8_1: str = (
         "oci://quay.io/mwaykole/test@sha256:8a3217bcfa2cc5fa3d07496cff8b234acdf2c9725dd307dc0a80401f55e1a11c"
-    # noqa: E501
+        # noqa: E501
     )
     GRANITE_8B_CODE_INSTRUCT: str = "oci://registry.redhat.io/rhelai1/modelcar-granite-8b-code-instruct:1.4"
 
@@ -266,7 +266,7 @@ class MinIo:
     class PodConfig:
         KSERVE_MINIO_IMAGE: str = (
             "quay.io/jooholee/model-minio@sha256:b50aa0fbfea740debb314ece8e925b3e8e761979f345b6cd12a6833efd04e2c2"
-        # noqa: E501
+            # noqa: E501
         )
 
         MINIO_BASE_CONFIG: dict[str, Any] = {

@@ -21,12 +21,12 @@ from tests.model_serving.model_runtime.triton.constant import (
 )
 from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import (
     kserve_s3_endpoint_secret,
-    get_template_name, get_gpu_identifier,
+    get_template_name,
+    get_gpu_identifier,
 )
 
 from utilities.constants import (
     KServeDeploymentType,
-    Labels,
     Protocols,
 )
 from utilities.inference_utils import create_isvc

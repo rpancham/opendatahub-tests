@@ -1,7 +1,7 @@
 import os
-import json
 from typing import Any, Union
 
+from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import load_json
 from utilities.constants import (
     KServeDeploymentType,
     Protocols,
@@ -12,41 +12,12 @@ from utilities.constants import (
 TRITON_SERVER_IMAGE = "nvcr.io/nvidia/tritonserver:23.05-py3"
 TRITON_INPUT_BASE_PATH = "tests/model_serving/model_runtime/triton/basic_model_deployment"
 
-TRITON_REST_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-resnet-rest-input.json")
-TRITON_GRPC_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-resnet-gRPC-input.json")
 TRITON_REST_ONNX_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-onnx-rest-input.json")
 TRITON_GRPC_ONNX_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-onnx-gRPC-input.json")
-TRITON_REST_TF_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-tensorflow-rest-input.json")
-TRITON_GRPC_TF_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-tensorflow-gRPC-input.json")
-TRITON_REST_KERAS_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-keras-triton-resnet-rest-input.json")
-TRITON_GRPC_KERAS_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-keras-triton-resnet-grpc-input.json")
-TRITON_REST_PYTHON_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-python-rest-input.json")
-TRITON_GRPC_PYTHON_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-python-grpc-input.json")
-TRITON_REST_FIL_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-fil-rest-input.json")
-TRITON_GRPC_FIL_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-fil-gRPC-input.json")
-TRITON_REST_DALI_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-dali-rest-input.json")
-TRITON_GRPC_DALI_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-dali-gRPC-input.json")
 
 
-def load_json(path: str) -> dict[str, Any]:
-    with open(path, "r") as f:
-        return json.load(f)
-
-
-TRITON_REST_INPUT_QUERY = load_json(path=TRITON_REST_INPUT_PATH)
-TRITON_GRPC_INPUT_QUERY = load_json(path=TRITON_GRPC_INPUT_PATH)
 TRITON_REST_ONNX_INPUT_QUERY = load_json(path=TRITON_REST_ONNX_INPUT_PATH)
 TRITON_GRPC_ONNX_INPUT_QUERY = load_json(path=TRITON_GRPC_ONNX_INPUT_PATH)
-TRITON_REST_TF_INPUT_QUERY = load_json(path=TRITON_REST_TF_INPUT_PATH)
-TRITON_GRPC_TF_INPUT_QUERY = load_json(path=TRITON_GRPC_TF_INPUT_PATH)
-TRITON_REST_KERAS_INPUT_QUERY = load_json(path=TRITON_REST_KERAS_INPUT_PATH)
-TRITON_GRPC_KERAS_INPUT_QUERY = load_json(path=TRITON_GRPC_KERAS_INPUT_PATH)
-TRITON_REST_PYTHON_INPUT_QUERY = load_json(path=TRITON_REST_PYTHON_INPUT_PATH)
-TRITON_GRPC_PYTHON_INPUT_QUERY = load_json(path=TRITON_GRPC_PYTHON_INPUT_PATH)
-TRITON_REST_FIL_INPUT_QUERY = load_json(path=TRITON_REST_FIL_INPUT_PATH)
-TRITON_GRPC_FIL_INPUT_QUERY = load_json(path=TRITON_GRPC_FIL_INPUT_PATH)
-TRITON_REST_DALI_INPUT_QUERY = load_json(path=TRITON_REST_DALI_INPUT_PATH)
-TRITON_GRPC_DALI_INPUT_QUERY = load_json(path=TRITON_GRPC_DALI_INPUT_PATH)
 
 LOCAL_HOST_URL: str = "http://localhost"
 TRITON_REST_PORT: int = 8080
@@ -58,12 +29,6 @@ MODEL_PATH_PREFIX: str = "triton/model_repository"
 MODEL_PATH_PREFIX_DALI: str = "triton_gpu/model_repository"
 
 PROTO_FILE_PATH: str = "utilities/manifests/common/grpc_predict_v2.proto"
-
-BASE_DIR = os.path.dirname(__file__)
-TEMPLATE_FILE_PATH: dict[str, str] = {
-    Protocols.REST: os.path.join(BASE_DIR, "basic_model_deployment", "triton_rest_serving_template.yaml"),
-    Protocols.GRPC: os.path.join(BASE_DIR, "basic_model_deployment", "triton_grpc_serving_template.yaml"),
-}
 
 TEMPLATE_MAP: dict[str, str] = {
     "rest_nvidia": RuntimeTemplates.TRITON_REST,
@@ -77,14 +42,14 @@ RUNTIME_MAP: dict[str, str] = {
 
 PREDICT_RESOURCES: dict[str, Union[list[dict[str, Union[str, dict[str, str]]]], dict[str, dict[str, str]]]] = {
     "volumes": [
-        {"name": "shared-memory", "emptyDir": {"medium": "Memory", "sizeLimit": "2Gi"}},
+        {"name": "shared-memory", "emptyDir": {"medium": "Memory", "sizeLimit": "16Gi"}},
         {"name": "tmp", "emptyDir": {}},
         {"name": "home", "emptyDir": {}},
     ],
     "volume_mounts": [
         {"name": "shared-memory", "mountPath": "/dev/shm"},
         {"name": "tmp", "mountPath": "/tmp"},
-        {"name": "home", "mountPath": "/home/mlserver"},
+        {"name": "home", "mountPath": "/home/triton"},
     ],
     "resources": {
         "requests": {"cpu": "1", "memory": "2Gi"},
@@ -106,5 +71,5 @@ BASE_SERVERLESS_DEPLOYMENT_CONFIG: dict[str, Any] = {
 
 ACCELERATOR_IDENTIFIER: dict[str, str] = {
     "nvidia": Labels.Nvidia.NVIDIA_COM_GPU,
-    "amd": "amd.com/gpu",
+    "amd": Labels.ROCm.ROCM_GPU,
 }

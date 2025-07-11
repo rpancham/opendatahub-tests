@@ -194,13 +194,6 @@ def get_gpu_identifier(accelerator_type: str) -> str:
     return ACCELERATOR_IDENTIFIER.get(accelerator_type.lower(), Labels.Nvidia.NVIDIA_COM_GPU)
 
 
-def get_accelerator_label(accelerator_type: str) -> str:
-    """
-    Maps accelerator type to Kubernetes GPU identifier. Defaults to NVIDIA.
-    """
-    return ACCELERATOR_IDENTIFIER.get(accelerator_type.lower(), Labels.Nvidia.NVIDIA_COM_GPU)
-
-
 def get_template_name(protocol: str, accelerator_type: str) -> str:
     """
     Returns template name based on protocol and accelerator type.
@@ -208,3 +201,8 @@ def get_template_name(protocol: str, accelerator_type: str) -> str:
     """
     key = f"{protocol.lower()}_{accelerator_type.lower()}"
     return TEMPLATE_MAP.get(key, RuntimeTemplates.TRITON_REST)
+
+
+def load_json(path: str) -> dict[str, Any]:
+    with open(path, "r") as f:
+        return json.load(f)

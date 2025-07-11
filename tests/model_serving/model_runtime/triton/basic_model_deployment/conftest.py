@@ -17,12 +17,11 @@ from ocp_resources.service_account import ServiceAccount
 from tests.model_serving.model_runtime.triton.constant import (
     PREDICT_RESOURCES,
     RUNTIME_MAP,
-    ACCELERATOR_IDENTIFIER,
     TRITON_SERVER_IMAGE,
 )
 from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import (
     kserve_s3_endpoint_secret,
-    get_template_name,
+    get_template_name, get_gpu_identifier,
 )
 
 from utilities.constants import (
@@ -141,7 +140,7 @@ def create_triton_serving_runtime(protocol: str) -> ServingRuntime:
     )
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="function")
 def triton_serving_runtime(
     request: pytest.FixtureRequest,
     admin_client: DynamicClient,
@@ -193,7 +192,7 @@ def triton_inference_service(
     }
     resources = copy.deepcopy(cast(dict[str, dict[str, str]], PREDICT_RESOURCES["resources"]))
     if gpu_count > 0:
-        identifier = ACCELERATOR_IDENTIFIER.get(supported_accelerator_type.lower(), Labels.Nvidia.NVIDIA_COM_GPU)
+        identifier = get_gpu_identifier(supported_accelerator_type)
         resources["requests"][identifier] = gpu_count
         resources["limits"][identifier] = gpu_count
 

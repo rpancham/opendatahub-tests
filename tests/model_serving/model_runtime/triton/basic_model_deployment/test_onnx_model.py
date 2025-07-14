@@ -82,7 +82,7 @@ pytestmark = pytest.mark.usefixtures(
     ],
     indirect=True,
 )
-class TestonnxModel:
+class TestONNXModel:
     """
     Test class for onnx inference using Triton on KServe.
 

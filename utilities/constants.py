@@ -280,13 +280,15 @@ class MinIo:
         }
 
         MODEL_MESH_MINIO_CONFIG: dict[str, Any] = {
-            "image": "quay.io/trustyai_testing/modelmesh-minio-examples@sha256:d2ccbe92abf9aa5085b594b2cae6c65de2bf06306c30ff5207956eb949bb49da",
+            "image": "quay.io/trustyai_testing/modelmesh-minio-examples@"
+            "sha256:d2ccbe92abf9aa5085b594b2cae6c65de2bf06306c30ff5207956eb949bb49da",
             # noqa: E501
             **MINIO_BASE_CONFIG,
         }
 
         QWEN_MINIO_CONFIG: dict[str, Any] = {
-            "image": "quay.io/trustyai_testing/hf-llm-minio@sha256:2404a37d578f2a9c7adb3971e26a7438fedbe7e2e59814f396bfa47cd5fe93bb",
+            "image": "quay.io/trustyai_testing/hf-llm-minio@"
+            "sha256:2404a37d578f2a9c7adb3971e26a7438fedbe7e2e59814f396bfa47cd5fe93bb",
             # noqa: E501
             **MINIO_BASE_CONFIG,
         }

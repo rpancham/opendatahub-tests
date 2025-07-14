@@ -19,7 +19,6 @@ from tests.model_serving.model_runtime.triton.constant import (
     RUNTIME_MAP,
 )
 from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import (
-    kserve_s3_endpoint_secret,
     get_template_name,
     get_gpu_identifier,
 )
@@ -35,16 +34,6 @@ from utilities.serving_runtime import ServingRuntimeFromTemplate
 from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
-
-
-@pytest.fixture(scope="session")
-def root_dir(pytestconfig: pytest.Config) -> Any:
-    return pytestconfig.rootpath
-
-
-@pytest.fixture(scope="function")
-def protocol(request: pytest.FixtureRequest) -> str:
-    return request.param["protocol_type"]
 
 
 @pytest.fixture(scope="class")
@@ -90,7 +79,7 @@ def create_triton_template(
         yield template
 
 
-def create_triton_serving_runtime(protocol: str, triton_runtime_image: str) -> dict:
+def create_triton_serving_runtime(protocol: str, triton_runtime_image: str) -> dict[str, Any]:
     volumes = []
     volume_mounts = []
     if protocol == Protocols.GRPC:
@@ -160,7 +149,7 @@ def create_triton_serving_runtime(protocol: str, triton_runtime_image: str) -> d
     }
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="class")
 def triton_serving_runtime(
     request: pytest.FixtureRequest,
     admin_client: DynamicClient,
@@ -168,10 +157,10 @@ def triton_serving_runtime(
     protocol: str,
     supported_accelerator_type: str,
 ) -> Generator[ServingRuntime, None, None]:
-    template_name = get_template_name(protocol, supported_accelerator_type)
+    template_name = get_template_name(protocol=protocol, accelerator_type=supported_accelerator_type)
     with ServingRuntimeFromTemplate(
         client=admin_client,
-        name=RUNTIME_MAP.get(protocol),
+        name=RUNTIME_MAP.get(protocol, "triton-runtime"),
         namespace=model_namespace.name,
         template_name=template_name,
         deployment_type=request.param.get("deployment_type", KServeDeploymentType.RAW_DEPLOYMENT),
@@ -179,7 +168,7 @@ def triton_serving_runtime(
         yield model_runtime
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="class")
 def triton_inference_service(
     request: pytest.FixtureRequest,
     admin_client: DynamicClient,
@@ -210,7 +199,7 @@ def triton_inference_service(
     }
     resources = copy.deepcopy(cast(dict[str, dict[str, str]], PREDICT_RESOURCES["resources"]))
     if gpu_count > 0:
-        identifier = get_gpu_identifier(supported_accelerator_type)
+        identifier = get_gpu_identifier(accelerator_type=supported_accelerator_type)
         resources["requests"][identifier] = gpu_count
         resources["limits"][identifier] = gpu_count
 
@@ -239,27 +228,6 @@ def triton_model_service_account(
         secrets=[{"name": kserve_s3_secret.name}],
     ) as sa:
         yield sa
-
-
-@pytest.fixture(scope="class")
-def kserve_s3_secret(
-    admin_client: DynamicClient,
-    model_namespace: Namespace,
-    aws_access_key_id: str,
-    aws_secret_access_key: str,
-    models_s3_bucket_region: str,
-    models_s3_bucket_endpoint: str,
-) -> Generator[Secret, None, None]:
-    with kserve_s3_endpoint_secret(
-        admin_client=admin_client,
-        name="triton-models-bucket-secret",
-        namespace=model_namespace.name,
-        aws_access_key=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_s3_region=models_s3_bucket_region,
-        aws_s3_endpoint=models_s3_bucket_endpoint,
-    ) as secret:
-        yield secret
 
 
 @pytest.fixture

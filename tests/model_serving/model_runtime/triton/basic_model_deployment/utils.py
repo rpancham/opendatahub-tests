@@ -8,23 +8,17 @@ This module provides functions for:
 - Validating responses against snapshots
 """
 
-import os
 import json
+import os
 import subprocess
 import tempfile
-from contextlib import contextmanager
-from typing import Generator, Any
+from typing import Any
 
-import requests
 import portforward
-
-from kubernetes.dynamic import DynamicClient
-from ocp_resources.secret import Secret
+import requests
 from ocp_resources.inference_service import InferenceService
 
 from tests.model_serving.model_runtime.triton.constant import ACCELERATOR_IDENTIFIER, TEMPLATE_MAP
-from utilities.constants import Labels, RuntimeTemplates
-from utilities.constants import KServeDeploymentType, Protocols
 from tests.model_serving.model_runtime.triton.constant import (
     TRITON_GRPC_REMOTE_PORT,
     LOCAL_HOST_URL,
@@ -32,36 +26,8 @@ from tests.model_serving.model_runtime.triton.constant import (
     TRITON_REST_PORT,
     TRITON_GRPC_PORT,
 )
-
-
-@contextmanager
-def kserve_s3_endpoint_secret(
-    admin_client: DynamicClient,
-    name: str,
-    namespace: str,
-    aws_access_key: str,
-    aws_secret_access_key: str,
-    aws_s3_endpoint: str,
-    aws_s3_region: str,
-) -> Generator[Secret, Any, Any]:
-    with Secret(
-        client=admin_client,
-        name=name,
-        namespace=namespace,
-        annotations={
-            "serving.kserve.io/s3-endpoint": aws_s3_endpoint.replace("https://", ""),
-            "serving.kserve.io/s3-region": aws_s3_region,
-            "serving.kserve.io/s3-useanoncredential": "false",
-            "serving.kserve.io/s3-verifyssl": "0",
-            "serving.kserve.io/s3-usehttps": "1",
-        },
-        string_data={
-            "AWS_ACCESS_KEY_ID": aws_access_key,
-            "AWS_SECRET_ACCESS_KEY": aws_secret_access_key,
-        },
-        wait_for_resource=True,
-    ) as secret:
-        yield secret
+from utilities.constants import KServeDeploymentType, Protocols
+from utilities.constants import Labels, RuntimeTemplates
 
 
 def send_rest_request(url: str, input_data: dict[str, Any]) -> Any:

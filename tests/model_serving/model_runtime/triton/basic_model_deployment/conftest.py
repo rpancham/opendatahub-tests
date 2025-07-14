@@ -2,6 +2,8 @@ from typing import cast, Any, Generator, List, Dict
 import copy
 import pytest
 from contextlib import contextmanager
+
+from kubernetes.dynamic.exceptions import ResourceNotFoundError
 from syrupy.extensions.json import JSONSnapshotExtension
 from pytest_testconfig import config as py_config
 
@@ -242,5 +244,5 @@ def triton_pod_resource(
 ) -> Pod:
     pods = get_pods_by_isvc_label(client=admin_client, isvc=triton_inference_service)
     if not pods:
-        raise RuntimeError(f"No pods found for InferenceService {triton_inference_service.name}")
+        raise ResourceNotFoundError(f"No pods found for InferenceService {triton_inference_service.name}")
     return pods[0]

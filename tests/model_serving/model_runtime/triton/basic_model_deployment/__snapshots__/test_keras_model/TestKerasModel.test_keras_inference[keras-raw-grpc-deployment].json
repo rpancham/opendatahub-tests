@@ -1,0 +1,1 @@
+"gRPC request (stdin) failed:\nSTDOUT: \nSTDERR: ERROR:\n  Code: InvalidArgument\n  Message: [request id: test1] input byte size mismatch for input 'keras_tensor' for model 'resnet50'. Expected 602112, got 7965\n"

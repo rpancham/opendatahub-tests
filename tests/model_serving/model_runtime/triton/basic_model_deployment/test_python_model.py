@@ -37,36 +37,36 @@ pytestmark = pytest.mark.usefixtures(
     [
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": "python-keras-raw"},
+            {"name": "python-raw"},
             MODEL_STORAGE_URI_DICT,
             {**BASE_RAW_DEPLOYMENT_CONFIG},
             {
-                "name": "python-keras-raw-rest",
+                "name": "python-raw-rest",
                 **BASE_RAW_DEPLOYMENT_CONFIG,
             },
-            id="python-keras-raw-rest-deployment",
+            id="python-raw-rest-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
-            {"name": "python-keras-raw"},
+            {"name": "python-raw"},
             MODEL_STORAGE_URI_DICT,
             {**BASE_RAW_DEPLOYMENT_CONFIG},
             {
-                "name": "python-keras-raw-grpc",
+                "name": "python-raw-grpc",
                 **BASE_RAW_DEPLOYMENT_CONFIG,
             },
-            id="python-keras-raw-grpc-deployment",
+            id="python-raw-grpc-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": "python-keras-serverless"},
+            {"name": "python-serverless"},
             MODEL_STORAGE_URI_DICT,
             {**BASE_SERVERLESS_DEPLOYMENT_CONFIG},
             {
-                "name": "python-keras-serverless-rest",
+                "name": "python-serverless-rest",
                 **BASE_SERVERLESS_DEPLOYMENT_CONFIG,
             },
-            id="python-keras-serverless-rest-deployment",
+            id="python-serverless-rest-deployment",
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
@@ -74,15 +74,15 @@ pytestmark = pytest.mark.usefixtures(
             MODEL_STORAGE_URI_DICT,
             {**BASE_SERVERLESS_DEPLOYMENT_CONFIG},
             {
-                "name": "python-keras-serverless-grpc",
+                "name": "python-serverless-grpc",
                 **BASE_SERVERLESS_DEPLOYMENT_CONFIG,
             },
-            id="python-keras-serverless-grpc-deployment",
+            id="python-serverless-grpc-deployment",
         ),
     ],
     indirect=True,
 )
-class TestPYTHONModel:
+class TestPythonModel:
     """
     Test class for python inference using Triton on KServe.
 

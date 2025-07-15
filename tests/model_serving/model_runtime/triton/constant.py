@@ -13,7 +13,7 @@ TRITON_INPUT_BASE_PATH = "tests/model_serving/model_runtime/triton/basic_model_d
 TRITON_REST_ONNX_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-onnx-rest-input.json")
 TRITON_GRPC_ONNX_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-onnx-gRPC-input.json")
 TRITON_REST_PYTHON_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-python-rest-input.json")
-TRITON_GRPC_PYTHON_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-python-grpc-input.json")
+TRITON_GRPC_PYTHON_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-python-gRPC-input.json")
 
 LOCAL_HOST_URL: str = "http://localhost"
 TRITON_REST_PORT: int = 8080

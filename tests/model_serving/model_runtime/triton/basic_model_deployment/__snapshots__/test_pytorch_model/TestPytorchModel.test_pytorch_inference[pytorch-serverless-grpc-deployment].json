@@ -1,0 +1,1 @@
+"gRPC request (stdin) failed:\nSTDOUT: \nSTDERR: ERROR:\n  Code: InvalidArgument\n  Message: [request id: test1] unexpected shape for input 'input__0' for model 'resnet50'. Expected [3,224,224], got [1,3,224,224]. \n"

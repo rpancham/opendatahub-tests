@@ -24,6 +24,8 @@ TRITON_REST_DALI_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-trito
 TRITON_GRPC_DALI_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-dali-gRPC-input.json")
 TRITON_REST_FIL_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-fil-rest-input.json")
 TRITON_GRPC_FIL_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-fil-gRPC-input.json")
+TRITON_REST_TENSORT_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-tensort-rest-input.json")
+TRITON_GRPC_TENSORT_INPUT_PATH = os.path.join(TRITON_INPUT_BASE_PATH, "kserve-triton-tensort-gRPC-input.json")
 
 LOCAL_HOST_URL: str = "http://localhost"
 TRITON_REST_PORT: int = 8080
@@ -33,7 +35,7 @@ TRITON_GRPC_REMOTE_PORT: int = 443
 MODEL_PATH_PREFIX_KERAS: str = "triton_resnet/model_repository"
 MODEL_PATH_PREFIX: str = "triton/model_repository"
 MODEL_PATH_PREFIX_DALI: str = "triton_gpu/model_repository"
-
+MODEL_PATH_PREFIX_TSORT: str = "triton_tensrt/model_repository"
 PROTO_FILE_PATH: str = "utilities/manifests/common/grpc_predict_v2.proto"
 
 TEMPLATE_MAP: dict[str, str] = {

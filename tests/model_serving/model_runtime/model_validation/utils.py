@@ -23,8 +23,6 @@ def normalize_output(output):
         except Exception:
             pass
     elif isinstance(output, str):
-        import re
-
         output = re.sub(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", "[MASKED_UUID]", output)
     return output
 

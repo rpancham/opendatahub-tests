@@ -13,9 +13,10 @@ LOGGER = get_logger(name=__name__)
 
 
 @pytest.mark.usefixtures(
-    "updated_dsc_component_state_scope_class", "model_registry_mysql_metadata_db", "model_registry_instance_mysql"
+    "updated_dsc_component_state_scope_session", "model_registry_metadata_db_resources", "model_registry_instance"
 )
 class TestDBMigration:
+    @pytest.mark.sanity
     def test_db_migration_negative(
         self: Self,
         admin_client: DynamicClient,

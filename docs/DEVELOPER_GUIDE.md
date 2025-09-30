@@ -66,6 +66,12 @@ The project utilizes [openshift-python-wrapper](https://github.com/RedHatQE/open
 Please refer to the [documentation](https://github.com/RedHatQE/openshift-python-wrapper/blob/main/README.md)  
 and the [examples](https://github.com/RedHatQE/openshift-python-wrapper/tree/main/examples) for more information.
 
+For any missing resources, please generate a new resource using
+[class_generator tool](https://github.com/RedHatQE/openshift-python-wrapper/blob/main/class_generator/README.md) and
+create a PR against wrapper. Calls to cluster resources from tests, utils and fixtures must always use
+openshift-python-wrapper resource or oc command
+(when wrapper resource is not relevant. e.g. must-gather generation)
+
 
 ## Conftest
 - Top level [conftest.py](../conftest.py) contains pytest native fixtures.
@@ -169,4 +175,36 @@ Run tox:
 
 ```bash
 tox
+```
+
+## Adding new runtime
+To add a new runtime, you need to:  
+1. Add a new file under [manifests](../utilities/manifests) directory.
+2. Add `<runtime>_INFERENCE_CONFIG` dict with:
+```code
+    "support_multi_default_queries": True|False,  # Optioanl, if set to True, `default_query_model` should contains a dict with corresponding inference_type
+    "default_query_model": {
+        "query_input": <default query to be sent to the model>,
+        "query_output": <expected output>,
+        "use_regex": True|False, # Optional, if set to True, `query_output` should be a regex
+    },
+    "<query type, for example: all-tokens>": {
+        "<protocol, for example HTTP>": {
+            "endpoint": "<model endpoint>",
+            "header": "<model required headers>",
+            "body": '{<model expected body}',
+            "response_fields_map": {
+                "response_output": <output field in response>,
+                "response": <response field in response - optional>,
+            },
+        },
+```
+3. See [caikit_standalone](../utilities/manifests/caikit_standalone.py) for an example
+
+## AI Usage
+If using AI tooling to assist you in the process of writing or reviewing code:
+1. Understand what you are doing --as a developer, you are ultimately responsible for the code. Always assume the code produced by the AI tools is unsafe and incorrect, and always double-check it.
+2. We support [AGENTS.md](../AGENTS.md), an [open format](https://agents.md/) for guiding coding agents. If you use any proprietary tool that does not support `AGENTS.md` (e.g. Claude Code, Qwen Code, Gemini Code), you can create a symlink:
+```bash
+ln -s AGENTS.md CLAUDE.md
 ```

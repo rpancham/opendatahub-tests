@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Dict
 
 from ocp_resources.resource import Resource
 
@@ -75,6 +75,7 @@ class RuntimeTemplates:
     MLSERVER_REST: str = "mlserver-rest-runtime-template"
     TRITON_REST: str = "triton-rest-runtime-template"
     TRITON_GRPC: str = "triton-grpc-runtime-template"
+    GUARDRAILS_DETECTOR_HUGGINGFACE: str = "guardrails-detector-huggingface-serving-template"
 
 
 class ModelInferenceRuntime:
@@ -246,6 +247,29 @@ class ModelCarImage:
     GRANITE_8B_CODE_INSTRUCT: str = "oci://registry.redhat.io/rhelai1/modelcar-granite-8b-code-instruct:1.4"
 
 
+class OCIRegistry:
+    class Metadata:
+        NAME: str = "oci-registry"
+        DEFAULT_PORT: int = 5000
+        DEFAULT_HTTP_ADDRESS: str = "0.0.0.0"
+
+    class PodConfig:
+        REGISTRY_IMAGE: str = "ghcr.io/project-zot/zot:v2.1.8"
+        REGISTRY_BASE_CONFIG: dict[str, Any] = {
+            "args": None,
+            "labels": {
+                "maistra.io/expose-route": "true",
+            },
+        }
+
+    class Storage:
+        STORAGE_DRIVER: str = "s3"
+        STORAGE_DRIVER_ROOT_DIRECTORY: str = "/registry"
+        STORAGE_DRIVER_REGION: str = "us-east-1"
+        STORAGE_STORAGEDRIVER_SECURE: str = "false"
+        STORAGE_STORAGEDRIVER_FORCEPATHSTYLE: str = "true"
+
+
 class MinIo:
     class Metadata:
         NAME: str = "minio"
@@ -264,18 +288,21 @@ class MinIo:
 
     class PodConfig:
         KSERVE_MINIO_IMAGE: str = (
-            "quay.io/jooholee/model-minio@sha256:b50aa0fbfea740debb314ece8e925b3e8e761979f345b6cd12a6833efd04e2c2"
+            "quay.io/jooholee/model-minio@sha256:b9554be19a223830cf792d5de984ccc57fc140b954949f5ffc6560fab977ca7a"
             # noqa: E501
         )
-
-        MINIO_BASE_CONFIG: dict[str, Any] = {
-            "args": ["server", "/data1"],
+        MINIO_BASE_LABELS_ANNOTATIONS: dict[str, Any] = {
             "labels": {
                 "maistra.io/expose-route": "true",
             },
             "annotations": {
                 "sidecar.istio.io/inject": "true",
             },
+        }
+
+        MINIO_BASE_CONFIG: dict[str, Any] = {
+            "args": ["server", "/data1"],
+            **MINIO_BASE_LABELS_ANNOTATIONS,
         }
 
         MODEL_MESH_MINIO_CONFIG: dict[str, Any] = {
@@ -292,9 +319,22 @@ class MinIo:
             **MINIO_BASE_CONFIG,
         }
 
+        QWEN_HAP_BPIV2_MINIO_CONFIG: dict[str, Any] = {
+            "image": "quay.io/trustyai_testing/qwen2.5-0.5b-instruct-hap-bpiv2-minio@"
+            "sha256:eac1ca56f62606e887c80b4a358b3061c8d67f0b071c367c0aa12163967d5b2b",
+            # noqa: E501
+            **MINIO_BASE_CONFIG,
+        }
+
         KSERVE_MINIO_CONFIG: dict[str, Any] = {
             "image": KSERVE_MINIO_IMAGE,
             **MINIO_BASE_CONFIG,
+        }
+
+        MODEL_REGISTRY_MINIO_CONFIG: dict[str, Any] = {
+            "image": "quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+            "args": ["server", "/data"],
+            **MINIO_BASE_LABELS_ANNOTATIONS,
         }
 
     class RunTimeConfig:
@@ -324,3 +364,22 @@ OPENSHIFT_OPERATORS: str = "openshift-operators"
 MARIADB: str = "mariadb"
 MODEL_REGISTRY_CUSTOM_NAMESPACE: str = "model-registry-custom-ns"
 THANOS_QUERIER_ADDRESS = "https://thanos-querier.openshift-monitoring.svc:9092"
+BUILTIN_DETECTOR_CONFIG: Dict[str, Any] = {
+    "regex": {
+        "type": "text_contents",
+        "service": {
+            "hostname": "127.0.0.1",
+            "port": 8080,
+        },
+        "chunker_id": "whole_doc_chunker",
+        "default_threshold": 0.5,
+    }
+}
+
+QWEN_ISVC_NAME = "qwen-isvc"
+QWEN_MODEL_NAME: str = "qwen25-05b-instruct"
+
+CHAT_GENERATION_CONFIG: Dict[str, Any] = {
+    "service": {"hostname": f"{QWEN_MODEL_NAME}-predictor", "port": 8032, "request_timeout": 600}
+}
+TRUSTYAI_SERVICE_NAME: str = "trustyai-service"

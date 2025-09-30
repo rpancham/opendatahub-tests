@@ -61,6 +61,8 @@ from utilities.operator_utils import get_csv_related_images, get_cluster_service
 
 LOGGER = get_logger(name=__name__)
 
+pytest_plugins = ["tests.fixtures.inference", "tests.fixtures.guardrails", "tests.fixtures.trustyai"]
+
 
 @pytest.fixture(scope="session")
 def admin_client() -> DynamicClient:
@@ -201,10 +203,13 @@ def ci_s3_bucket_endpoint(pytestconfig: pytest.Config) -> str:
 
 
 @pytest.fixture(scope="session")
-def serving_argument(pytestconfig: pytest.Config, modelcar_yaml_config: dict[str, Any] | None) -> list[str]:
+def serving_argument(pytestconfig: pytest.Config, modelcar_yaml_config: dict[str, Any] | None) -> tuple[list[str], int]:
     if modelcar_yaml_config:
-        arg = modelcar_yaml_config.get("serving_argument", [])
-        return arg if isinstance(arg, list) else [arg]
+        val = modelcar_yaml_config.get("serving_arguments", {})
+        if isinstance(val, dict):
+            args = val.get("args", [])
+            gpu_count = val.get("gpu_count", 1)
+        return args, gpu_count
 
     raw_arg = pytestconfig.option.serving_argument
     try:
@@ -413,18 +418,6 @@ def dsc_resource(admin_client: DynamicClient) -> DataScienceCluster:
     return DataScienceCluster(client=admin_client, name=py_config["dsc_name"], ensure_exists=True)
 
 
-@pytest.fixture(scope="module")
-def updated_dsc_component_state(
-    request: FixtureRequest,
-    dsc_resource: DataScienceCluster,
-) -> Generator[DataScienceCluster, Any, Any]:
-    with update_components_in_dsc(
-        dsc=dsc_resource,
-        components={request.param["component_name"]: request.param["desired_state"]},
-    ) as dsc:
-        yield dsc
-
-
 @pytest.fixture(scope="package")
 def enabled_modelmesh_in_dsc(
     dsc_resource: DataScienceCluster,
@@ -524,6 +517,7 @@ def minio_pod(
         label=pod_labels,
         annotations=request.param.get("annotations"),
     ) as minio_pod:
+        minio_pod.wait_for_status(status=Pod.Status.RUNNING)
         yield minio_pod
 
 
@@ -704,3 +698,28 @@ def mariadb_operator_cr(
         )
         wait_for_mariadb_operator_deployments(mariadb_operator=mariadb_operator_cr)
         yield mariadb_operator_cr
+
+
+@pytest.fixture(scope="session")
+def gpu_count_on_cluster(nodes: list[Any]) -> int:
+    """Return total GPU count across all nodes in the cluster.
+
+    Counts full-GPU extended resources only:
+      - nvidia.com/gpu
+      - amd.com/gpu
+      - gpu.intel.com/*  (e.g., i915, xe)
+    Note: MIG slice resources (nvidia.com/mig-*) are intentionally ignored.
+    """
+    total_gpus = 0
+    allowed_exact = {"nvidia.com/gpu", "amd.com/gpu", "intel.com/gpu"}
+    allowed_prefixes = ("gpu.intel.com/",)
+    for node in nodes:
+        allocatable = getattr(node.instance.status, "allocatable", {}) or {}
+        for key, val in allocatable.items():
+            if key in allowed_exact or any(key.startswith(p) for p in allowed_prefixes):
+                try:
+                    total_gpus += int(val)
+                except (ValueError, TypeError):
+                    LOGGER.debug(f"Skipping non-integer allocatable for {key} on {node.name}: {val!r}")
+                    continue
+    return total_gpus

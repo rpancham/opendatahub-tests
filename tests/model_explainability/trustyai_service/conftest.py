@@ -31,9 +31,7 @@ from tests.model_explainability.trustyai_service.constants import (
     KSERVE_MLSERVER_SUPPORTED_MODEL_FORMATS,
     KSERVE_MLSERVER_ANNOTATIONS,
     GAUSSIAN_CREDIT_MODEL_RESOURCES,
-    GAUSSIAN_CREDIT_MODEL_STORAGE_PATH,
     XGBOOST,
-    GAUSSIAN_CREDIT_MODEL,
     TAI_DB_STORAGE_CONFIG,
     ISVC_GETTER,
 )
@@ -208,6 +206,11 @@ def mariadb(
     mariadb_dict["spec"]["username"] = DB_USERNAME
 
     mariadb_dict["spec"]["replicas"] = 1
+
+    # Need to fix MariaDB version due to an issue with the default version in certain environments
+    # Using the same registry and image used by the MariaDB operator
+    # --just changing the tag to point to a stable version
+    mariadb_dict["spec"]["image"] = "docker-registry1.mariadb.com/library/mariadb:10.11.8"
     mariadb_dict["spec"]["galera"]["enabled"] = False
     mariadb_dict["spec"]["metrics"]["enabled"] = False
     mariadb_dict["spec"]["tls"] = {"enabled": True, "required": True}
@@ -285,7 +288,7 @@ def gaussian_credit_model(
     gaussian_credit_model_kwargs = {
         "client": admin_client,
         "namespace": model_namespace.name,
-        "name": GAUSSIAN_CREDIT_MODEL,
+        "name": "models",
     }
 
     if pytestconfig.option.post_upgrade:
@@ -297,8 +300,7 @@ def gaussian_credit_model(
             deployment_mode=KServeDeploymentType.RAW_DEPLOYMENT,
             model_format=XGBOOST,
             runtime=mlserver_runtime.name,
-            storage_key=minio_data_connection.name,
-            storage_path=GAUSSIAN_CREDIT_MODEL_STORAGE_PATH,
+            storage_uri="oci://quay.io/trustyai_testing/gaussian-credit-model-modelcar:latest",
             enable_auth=True,
             external_route=True,
             wait_for_predictor_pods=False,

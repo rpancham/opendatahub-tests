@@ -583,6 +583,7 @@ def create_isvc(
     protocol_version: str | None = None,
     labels: dict[str, str] | None = None,
     auto_scaling: dict[str, Any] | None = None,
+    scheduler_name: str | None = None,
 ) -> Generator[InferenceService, Any, Any]:
     """
     Create InferenceService object.
@@ -618,6 +619,7 @@ def create_isvc(
         teardown (bool): Teardown
         protocol_version (str): Protocol version of the model server
         auto_scaling (dict[str, Any]): Auto scaling configuration for the model
+        scheduler_name (str): Scheduler name
 
     Yields:
         InferenceService: InferenceService object
@@ -643,7 +645,8 @@ def create_isvc(
     if model_version:
         predictor_dict["model"]["modelFormat"]["version"] = model_version
 
-    _check_storage_arguments(storage_uri=storage_uri, storage_key=storage_key, storage_path=storage_path)
+    if storage_uri or storage_path or storage_key:
+        _check_storage_arguments(storage_uri=storage_uri, storage_key=storage_key, storage_path=storage_path)
     if storage_uri:
         predictor_dict["model"]["storageUri"] = storage_uri
     elif storage_key:
@@ -710,6 +713,9 @@ def create_isvc(
 
     if protocol_version is not None:
         predictor_dict["model"]["protocolVersion"] = protocol_version
+
+    if scheduler_name is not None:
+        predictor_dict["schedulerName"] = scheduler_name
 
     with InferenceService(
         client=client,

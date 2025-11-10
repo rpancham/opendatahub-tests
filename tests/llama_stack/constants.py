@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
+from typing import List, NamedTuple, TypedDict
+from llama_stack_client.types import Model
+from semver import VersionInfo
+import semver
 
 
 class LlamaStackProviders:
@@ -14,9 +17,53 @@ class LlamaStackProviders:
 
     class Eval(str, Enum):
         TRUSTYAI_LMEVAL = "trustyai_lmeval"
+        TRUSTYAI_RAGAS_INLINE = "trustyai_ragas_inline"
+
+
+class ModelInfo(NamedTuple):
+    """Container for model information from LlamaStack client."""
+
+    model_id: str
+    embedding_model: Model
+    embedding_dimension: int
 
 
 LLS_CORE_POD_FILTER: str = "app=llama-stack"
+LLS_OPENSHIFT_MINIMAL_VERSION: VersionInfo = semver.VersionInfo.parse("4.17.0")
+
+
+class TurnExpectation(TypedDict):
+    question: str
+    expected_keywords: List[str]
+    description: str
+
+
+class TurnResult(TypedDict):
+    question: str
+    description: str
+    expected_keywords: List[str]
+    found_keywords: List[str]
+    missing_keywords: List[str]
+    response_content: str
+    response_length: int
+    event_count: int
+    success: bool
+    error: str | None
+
+
+class ValidationSummary(TypedDict):
+    total_turns: int
+    successful_turns: int
+    failed_turns: int
+    success_rate: float
+    total_events: int
+    total_response_length: int
+
+
+class ValidationResult(TypedDict):
+    success: bool
+    results: List[TurnResult]
+    summary: ValidationSummary
 
 
 @dataclass

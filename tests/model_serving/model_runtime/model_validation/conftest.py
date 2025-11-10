@@ -1,5 +1,5 @@
 import json
-from typing import Any, Generator
+from typing import Any, Generator, List
 
 import pytest
 import yaml
@@ -31,6 +31,7 @@ from tests.model_serving.model_runtime.vllm.utils import validate_supported_quan
 from utilities.constants import KServeDeploymentType, Labels, RuntimeTemplates
 from utilities.inference_utils import create_isvc
 from utilities.serving_runtime import ServingRuntimeFromTemplate
+
 from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
@@ -45,6 +46,7 @@ def model_car_serving_runtime(
     vllm_runtime_image: str,
 ) -> Generator[ServingRuntime, None, None]:
     accelerator_type = supported_accelerator_type.lower()
+
     template_name = TEMPLATE_MAP.get(accelerator_type, RuntimeTemplates.VLLM_CUDA)
     LOGGER.info(f"using template: {template_name}")
     assert model_namespace.name is not None
@@ -87,6 +89,20 @@ def vllm_model_car_inference_service(
     resources["requests"][identifier] = gpu_count
     resources["limits"][identifier] = gpu_count
     isvc_kwargs["resources"] = resources
+
+    if (
+        identifier == Labels.Spyre.SPYRE_COM_GPU
+        and deployment_config.get("deployment_type") == KServeDeploymentType.SERVERLESS
+    ):
+        pytest.skip("Spyre cluster is not setup with TLS/mTLS")
+    if identifier == Labels.Spyre.SPYRE_COM_GPU:
+        isvc_kwargs["scheduler_name"] = "spyre-scheduler"
+        resources["requests"] = {
+            "ibm.com/spyre_pf": gpu_count,
+        }
+        resources["limits"] = {
+            "ibm.com/spyre_pf": gpu_count,
+        }
 
     if timeout:
         isvc_kwargs["timeout"] = timeout
@@ -131,6 +147,7 @@ def kserve_registry_pull_secret(
             "ACCESS_TYPE": PULL_SECRET_ACCESS_TYPE,
             "OCI_HOST": registry_host,
         },
+        type="kubernetes.io/dockerconfigjson",
         wait_for_resource=True,
     ) as secret:
         yield secret
@@ -158,49 +175,87 @@ def deployment_config(request: FixtureRequest) -> dict[str, Any]:
 
 
 def build_raw_params(
-    name: str, image: str, args: list[str], gpu_count: int, model_output_type: str = "text"
+    name: str,
+    image: str,
+    args: list[str],
+    gpu_count: int,
+    execution_mode: str,
+    model_output_type: str = "text",
 ) -> tuple[Any, str]:
     test_id = f"{name}-raw"
+    deployment_type = KServeDeploymentType.RAW_DEPLOYMENT
     param = pytest.param(
         {"name": "raw-model-validation"},
-        {"deployment_type": KServeDeploymentType.RAW_DEPLOYMENT},
+        {"deployment_type": deployment_type},
         {
             "model_name": name,
             "model_car_image_uri": image,
         },
         {
-            "deployment_type": KServeDeploymentType.RAW_DEPLOYMENT,
+            "deployment_type": deployment_type,
             "runtime_argument": args,
             "gpu_count": gpu_count,
             "model_output_type": model_output_type,
         },
         id=test_id,
-        marks=[pytest.mark.rawdeployment],
+        marks=build_pytest_markers(deployment_type=deployment_type, execution_mode=execution_mode),
     )
     return param, test_id
 
 
 def build_serverless_params(
-    name: str, image: str, args: list[str], gpu_count: int, model_output_type: str = "text"
+    name: str,
+    image: str,
+    args: list[str],
+    gpu_count: int,
+    execution_mode: str,
+    model_output_type: str = "text",
 ) -> tuple[Any, str]:
     test_id = f"{name}-serverless"
+    deployment_type = KServeDeploymentType.SERVERLESS
     param = pytest.param(
         {"name": "serverless-model-validation"},
-        {"deployment_type": KServeDeploymentType.SERVERLESS},
+        {"deployment_type": deployment_type},
         {
             "model_name": name,
             "model_car_image_uri": image,
         },
         {
-            "deployment_type": KServeDeploymentType.SERVERLESS,
+            "deployment_type": deployment_type,
             "runtime_argument": args,
             "gpu_count": gpu_count,
             "model_output_type": model_output_type,
         },
         id=test_id,
-        marks=[pytest.mark.serverless],
+        marks=build_pytest_markers(deployment_type=deployment_type, execution_mode=execution_mode),
     )
     return param, test_id
+
+
+def build_pytest_markers(deployment_type: str, execution_mode: str) -> List[Any]:
+    """
+    Build a list of pytest markers based on deployment type, execution mode.
+
+    Args:
+        deployment_type (str): Deployment type (e.g., RAW_DEPLOYMENT, SERVERLESS)
+        execution_mode (str): "parallel" or "sequential"
+
+    Returns:
+        List[Any]: List of pytest.mark objects to attach to the test
+    """
+    markers: List[pytest.MarkDecorator] = []
+
+    if deployment_type == KServeDeploymentType.RAW_DEPLOYMENT:
+        markers.append(pytest.mark.rawdeployment)
+    elif deployment_type == KServeDeploymentType.SERVERLESS:
+        markers.append(pytest.mark.serverless)
+
+    # Execution mode markers
+    if execution_mode == "parallel":
+        markers.append(pytest.mark.parallel)
+        markers.append(pytest.mark.skip_must_gather)
+
+    return markers
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -219,7 +274,6 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if not isinstance(model_car_data, list):
         raise ValueError("Invalid format for `model-car` in YAML. Expected a list of objects.")
 
-    # Check if metafunc.cls is not None to avoid linter errors
     if not metafunc.cls:
         return
 
@@ -232,6 +286,10 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
         name = model_car.get("name", "").strip()
         image = model_car.get("image", "").strip()
+        execution_mode = (
+            model_car.get("execution_mode", "").strip()
+            or default_serving_config.get("execution_mode", "sequential").strip()
+        )
 
         if not name or not image:
             continue
@@ -243,11 +301,21 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
         if metafunc.cls.__name__ == "TestVLLMModelCarRaw":
             param, test_id = build_raw_params(
-                name=name, image=image, args=args, gpu_count=gpu_count, model_output_type=model_output_type
+                name=name,
+                image=image,
+                args=args,
+                gpu_count=gpu_count,
+                execution_mode=execution_mode,
+                model_output_type=model_output_type,
             )
         elif metafunc.cls.__name__ == "TestVLLMModelCarServerless":
             param, test_id = build_serverless_params(
-                name=name, image=image, args=args, gpu_count=gpu_count, model_output_type=model_output_type
+                name=name,
+                image=image,
+                args=args,
+                gpu_count=gpu_count,
+                execution_mode=execution_mode,
+                model_output_type=model_output_type,
             )
         else:
             continue

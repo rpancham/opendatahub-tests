@@ -5,7 +5,7 @@ from tests.model_serving.model_server.inference_service_configuration.constants 
     ORIGINAL_PULL_SECRET,
     UPDATED_PULL_SECRET,
 )
-from utilities.constants import ModelName, RuntimeTemplates
+from utilities.constants import ModelName, ModelStorage, RuntimeTemplates
 
 
 @pytest.mark.parametrize(
@@ -18,10 +18,7 @@ from utilities.constants import ModelName, RuntimeTemplates
                 "template-name": RuntimeTemplates.OVMS_KSERVE,
                 "multi-model": False,
             },
-            {
-                # Using mnist-8-1 model from OCI image
-                "storage-uri": "oci://quay.io/mwaykole/test@sha256:8a3217bcfa2cc5fa3d07496cff8b234acdf2c9725dd307dc0a80401f55e1a11c"  # noqa: E501
-            },
+            {"storage-uri": ModelStorage.OCI.MNIST_8_1},
         )
     ],
     indirect=True,

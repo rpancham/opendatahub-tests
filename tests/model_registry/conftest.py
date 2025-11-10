@@ -13,6 +13,7 @@ from ocp_resources.config_map import ConfigMap
 from ocp_resources.infrastructure import Infrastructure
 from ocp_resources.oauth import OAuth
 from ocp_resources.pod import Pod
+from ocp_resources.route import Route
 from ocp_resources.secret import Secret
 from ocp_resources.namespace import Namespace
 from ocp_resources.service import Service
@@ -33,7 +34,7 @@ from pytest_testconfig import config as py_config
 from model_registry.types import RegisteredModel
 
 from tests.model_registry.rbac.utils import wait_for_oauth_openshift_deployment
-from tests.model_registry.utils import generate_namespace_name, get_rest_headers
+from tests.model_registry.utils import generate_namespace_name, get_rest_headers, wait_for_default_resource_cleanedup
 from utilities.general import generate_random_name, wait_for_pods_running
 
 from tests.model_registry.constants import (
@@ -43,6 +44,8 @@ from tests.model_registry.constants import (
     DB_RESOURCE_NAME,
     MR_INSTANCE_NAME,
     MODEL_REGISTRY_POD_FILTER,
+    DEFAULT_CUSTOM_MODEL_CATALOG,
+    KUBERBACPROXY_STR,
 )
 from utilities.constants import Labels, Protocols
 from tests.model_registry.utils import (
@@ -83,6 +86,7 @@ def model_registry_instance(
         mr_instance.delete(wait=True)
     else:
         LOGGER.warning("Requested Oauth Proxy configuration:")
+        db_name = param.get("db_name", "mysql")
         mr_objects = get_model_registry_objects(
             client=admin_client,
             namespace=model_registry_namespace,
@@ -90,17 +94,19 @@ def model_registry_instance(
             num=param.get("num_resources", 1),
             teardown_resources=teardown_resources,
             params=param,
-            db_backend=param.get("db_name", "mysql"),
+            db_backend=db_name,
         )
         with ExitStack() as stack:
             mr_instances = [stack.enter_context(mr_obj) for mr_obj in mr_objects]
             for mr_instance in mr_instances:
                 mr_instance.wait_for_condition(condition="Available", status="True")
-                mr_instance.wait_for_condition(condition="OAuthProxyAvailable", status="True")
+                mr_instance.wait_for_condition(condition=KUBERBACPROXY_STR, status="True")
                 wait_for_pods_running(
                     admin_client=admin_client, namespace_name=model_registry_namespace, number_of_consecutive_checks=6
                 )
             yield mr_instances
+        if db_name == "default":
+            wait_for_default_resource_cleanedup(admin_client=admin_client, namespace_name=model_registry_namespace)
 
 
 @pytest.fixture(scope="class")
@@ -132,24 +138,27 @@ def model_registry_metadata_db_resources(
                 resource.delete(wait=True)
     else:
         resources_instances = {}
-        resources = get_model_registry_metadata_resources(
-            base_name=DB_BASE_RESOURCES_NAME,
-            namespace=model_registry_namespace,
-            num_resources=num_resources,
-            db_backend=db_backend,
-            teardown_resources=teardown_resources,
-            client=admin_client,
-        )
-        with ExitStack() as stack:
-            for kind_name in [Secret, PersistentVolumeClaim, Service, ConfigMap, Deployment]:
-                if resources[kind_name]:
-                    LOGGER.info(f"Creating {num_resources} {kind_name} resources")
-                    resources_instances[kind_name] = [
-                        stack.enter_context(resource_obj) for resource_obj in resources[kind_name]
-                    ]
-            for deployment in resources_instances[Deployment]:
-                deployment.wait_for_replicas(deployed=True)
+        if db_backend == "default":
             yield resources_instances
+        else:
+            resources = get_model_registry_metadata_resources(
+                base_name=DB_BASE_RESOURCES_NAME,
+                namespace=model_registry_namespace,
+                num_resources=num_resources,
+                db_backend=db_backend,
+                teardown_resources=teardown_resources,
+                client=admin_client,
+            )
+            with ExitStack() as stack:
+                for kind_name in [Secret, PersistentVolumeClaim, Service, ConfigMap, Deployment]:
+                    if resources[kind_name]:
+                        LOGGER.info(f"Creating {num_resources} {kind_name} resources")
+                        resources_instances[kind_name] = [
+                            stack.enter_context(resource_obj) for resource_obj in resources[kind_name]
+                        ]
+                for deployment in resources_instances[Deployment]:
+                    deployment.wait_for_replicas(deployed=True)
+                yield resources_instances
 
 
 @pytest.fixture(scope="class")
@@ -472,43 +481,45 @@ def mr_access_role_binding(
 
 @pytest.fixture(scope="module")
 def test_idp_user(
-    original_user: str,
-    user_credentials_rbac: dict[str, str],
-    created_htpasswd_secret: Generator[UserTestSession, None, None],
-    updated_oauth_config: Generator[Any, None, None],
-    api_server_url: str,
+    request: pytest.FixtureRequest, original_user: str, api_server_url: str, is_byoidc: bool
 ) -> Generator[UserTestSession, None, None]:
     """
     Session-scoped fixture that creates a test IDP user and cleans it up after all tests.
     Returns a UserTestSession object that contains all necessary credentials and contexts.
     """
-    idp_session = None
-    try:
-        if wait_for_user_creation(
-            username=user_credentials_rbac["username"],
-            password=user_credentials_rbac["password"],
-            cluster_url=api_server_url,
-        ):
-            # undo the login as test user if we were successful in logging in as test user
-            LOGGER.info(f"Undoing login as test user and logging in as {original_user}")
-            login_with_user_password(api_address=api_server_url, user=original_user)
+    if is_byoidc:
+        pytest.skip("Working on OIDC support for tests that use test_idp_user")
+    else:
+        user_credentials_rbac = request.getfixturevalue(argname="user_credentials_rbac")
+        _ = request.getfixturevalue(argname="created_htpasswd_secret")
+        _ = request.getfixturevalue(argname="updated_oauth_config")
+        idp_session = None
+        try:
+            if wait_for_user_creation(
+                username=user_credentials_rbac["username"],
+                password=user_credentials_rbac["password"],
+                cluster_url=api_server_url,
+            ):
+                # undo the login as test user if we were successful in logging in as test user
+                LOGGER.info(f"Undoing login as test user and logging in as {original_user}")
+                login_with_user_password(api_address=api_server_url, user=original_user)
 
-        idp_session = UserTestSession(
-            idp_name=user_credentials_rbac["idp_name"],
-            secret_name=user_credentials_rbac["secret_name"],
-            username=user_credentials_rbac["username"],
-            password=user_credentials_rbac["password"],
-            original_user=original_user,
-            api_server_url=api_server_url,
-        )
-        LOGGER.info(f"Created session test IDP user: {idp_session.username}")
+            idp_session = UserTestSession(
+                idp_name=user_credentials_rbac["idp_name"],
+                secret_name=user_credentials_rbac["secret_name"],
+                username=user_credentials_rbac["username"],
+                password=user_credentials_rbac["password"],
+                original_user=original_user,
+                api_server_url=api_server_url,
+            )
+            LOGGER.info(f"Created session test IDP user: {idp_session.username}")
 
-        yield idp_session
+            yield idp_session
 
-    finally:
-        if idp_session:
-            LOGGER.info(f"Cleaning up test IDP user: {idp_session.username}")
-            idp_session.cleanup()
+        finally:
+            if idp_session:
+                LOGGER.info(f"Cleaning up test IDP user: {idp_session.username}")
+                idp_session.cleanup()
 
 
 @pytest.fixture(scope="session")
@@ -590,3 +601,28 @@ def user_credentials_rbac() -> dict[str, str]:
         "idp_name": f"test-htpasswd-idp-{random_str}",
         "secret_name": f"test-htpasswd-secret-{random_str}",
     }
+
+
+@pytest.fixture(scope="class")
+def catalog_config_map(admin_client: DynamicClient, model_registry_namespace: str) -> ConfigMap:
+    return ConfigMap(name=DEFAULT_CUSTOM_MODEL_CATALOG, client=admin_client, namespace=model_registry_namespace)
+
+
+@pytest.fixture(scope="class")
+def model_catalog_routes(admin_client: DynamicClient, model_registry_namespace: str) -> list[Route]:
+    return list(
+        Route.get(namespace=model_registry_namespace, label_selector="component=model-catalog", dyn_client=admin_client)
+    )
+
+
+@pytest.fixture(scope="class")
+def model_catalog_rest_url(model_registry_namespace: str, model_catalog_routes: list[Route]) -> list[str]:
+    assert model_catalog_routes, f"Model catalog routes does not exist in {model_registry_namespace}"
+    route_urls = [
+        f"https://{route.instance.spec.host}:443/api/model_catalog/v1alpha1/" for route in model_catalog_routes
+    ]
+    assert route_urls, (
+        "Model catalog routes information could not be found from "
+        f"routes:{[route.name for route in model_catalog_routes]}"
+    )
+    return route_urls

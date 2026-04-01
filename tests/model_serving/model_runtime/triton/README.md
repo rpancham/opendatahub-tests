@@ -9,7 +9,7 @@ Tests validate Triton's ability to serve models in various formats using both RE
 ## Supported Model Types
 
 | Framework | Backend | Test Module | Status |
-|-----------|---------|-------------|--------|
+| --------- | ------- | ----------- | ------ |
 | DALI | Custom | `test_dali_model.py` | ✅ GPU Required |
 | FIL (Forest Inference Library) | FIL | `test_fil_model.py` | ✅ CPU |
 | Keras | TensorFlow | `test_keras_model.py` | ✅ See TensorFlow Note |
@@ -31,7 +31,7 @@ Tests validate Triton's ability to serve models in various formats using both RE
 ⚠️ **IMPORTANT**: The TensorFlow backend was **deprecated in Triton 25.03** and **removed in Triton 26.x+**.
 
 | Triton Version | TensorFlow Backend | Recommendation |
-|----------------|-------------------|----------------|
+| -------------- | ------------------ | -------------- |
 | ≤ 25.02 | ✅ Included | **Use for TensorFlow/Keras models** |
 | 25.03+ | ⚠️ Deprecated | Build from source required |
 | 26.x+ | ❌ Removed | Not supported by default |
@@ -71,7 +71,7 @@ If you need to test against Triton 26.x with TensorFlow models, you have three o
 ### Backend Support by Version
 
 | Backend | Triton 25.02 | Triton 26.02 |
-|---------|--------------|--------------|
+| ------- | ------------ | ------------ |
 | ONNX Runtime | ✅ | ✅ |
 | PyTorch (LibTorch) | ✅ | ✅ |
 | Python | ✅ | ✅ |
@@ -168,7 +168,7 @@ Each model type test includes:
 
 ### TensorFlow Backend Missing Error
 
-```
+```text
 E0326 10:10:41.293702 1 model_lifecycle.cc:654] "failed to load 'model_name' version 1:
 Invalid argument: unable to find backend library for backend 'tensorflow',
 try specifying runtime on the model configuration."

@@ -21,6 +21,7 @@ Tests validate Triton's ability to serve models in various formats using both RE
 ## Triton Version Compatibility
 
 ### Current Default Version
+
 - **Image**: `nvcr.io/nvidia/tritonserver:25.02-py3`
 - **Triton Server Version**: 2.50.0
 - **Status**: Last stable release with TensorFlow backend included
@@ -40,6 +41,7 @@ Tests validate Triton's ability to serve models in various formats using both RE
 If you need to test against Triton 26.x with TensorFlow models, you have three options:
 
 1. **Build Custom Container** (Complex)
+
    ```bash
    # Build TensorFlow backend from source
    # See: https://github.com/triton-inference-server/tensorflow_backend
@@ -50,11 +52,13 @@ If you need to test against Triton 26.x with TensorFlow models, you have three o
    ```
 
 2. **Convert Models to ONNX** (Recommended for long-term)
+
    ```python
    # Convert TensorFlow model to ONNX
    import tf2onnx
    # ... conversion code
    ```
+
    - ONNX backend fully supported in all Triton versions
    - Often provides better performance
    - Requires model revalidation
@@ -78,11 +82,13 @@ If you need to test against Triton 26.x with TensorFlow models, you have three o
 ## Test Execution
 
 ### Running All Triton Tests
+
 ```bash
 pytest tests/model_serving/model_runtime/triton/basic_model_deployment/ -v
 ```
 
 ### Running Specific Model Type
+
 ```bash
 # PyTorch models
 pytest tests/model_serving/model_runtime/triton/basic_model_deployment/test_pytorch_model.py -v
@@ -92,6 +98,7 @@ pytest tests/model_serving/model_runtime/triton/basic_model_deployment/test_tens
 ```
 
 ### Testing with Different Triton Version
+
 ```bash
 # Override default Triton image (use with caution for 26.x)
 pytest tests/model_serving/model_runtime/triton/basic_model_deployment/ \
@@ -103,30 +110,37 @@ pytest tests/model_serving/model_runtime/triton/basic_model_deployment/ \
 ## Configuration
 
 ### Default Image
+
 File: `tests/model_serving/model_runtime/triton/constant.py`
+
 ```python
 TRITON_IMAGE: str = "nvcr.io/nvidia/tritonserver:25.02-py3"
 ```
 
 ### Runtime Template
+
 Tests create temporary ServingRuntime templates with:
+
 - Model store: `/mnt/models`
 - REST port: 8080
 - gRPC port: 9000
 - Resource limits: 1 CPU, 2Gi memory
 
 ### Supported Protocols
+
 - **REST**: HTTP/1.1 on port 8080
 - **gRPC**: HTTP/2 on port 9000
 
 ## Requirements
 
 ### Infrastructure
+
 - Kubernetes/OpenShift cluster
 - GPU nodes (for DALI models)
 - S3-compatible storage for model artifacts
 
 ### Permissions
+
 - Namespace creation
 - ServingRuntime template creation
 - InferenceService deployment
@@ -135,6 +149,7 @@ Tests create temporary ServingRuntime templates with:
 ## Test Structure
 
 Each model type test includes:
+
 1. **Fixtures** (`conftest.py`)
    - ServingRuntime template creation
    - InferenceService deployment
@@ -152,6 +167,7 @@ Each model type test includes:
 ## Troubleshooting
 
 ### TensorFlow Backend Missing Error
+
 ```
 E0326 10:10:41.293702 1 model_lifecycle.cc:654] "failed to load 'model_name' version 1:
 Invalid argument: unable to find backend library for backend 'tensorflow',
@@ -159,17 +175,20 @@ try specifying runtime on the model configuration."
 ```
 
 **Solution**: You are using Triton 26.x which doesn't include TensorFlow backend. Either:
+
 - Use Triton 25.02 or earlier (default)
 - Build custom container with TensorFlow backend
 - Convert models to ONNX format
 
 ### Model Loading Fails
+
 - Check model format matches backend
 - Verify S3 storage is accessible
 - Confirm model repository structure is correct
 - Review pod logs: `kubectl logs <pod-name>`
 
 ### GPU Not Available (DALI tests)
+
 - Ensure cluster has GPU nodes
 - Check GPU resource requests in pod spec
 - Verify NVIDIA device plugin is installed
@@ -188,6 +207,7 @@ try specifying runtime on the model configuration."
 **Reason**: Last release with TensorFlow backend support
 
 When updating the default Triton version:
+
 1. Review [release notes](https://docs.nvidia.com/deeplearning/triton-inference-server/release-notes/) for breaking changes
 2. Check backend availability (especially TensorFlow)
 3. Run full test suite before merging

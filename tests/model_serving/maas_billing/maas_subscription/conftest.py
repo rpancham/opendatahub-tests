@@ -5,19 +5,24 @@ import pytest
 import requests
 import structlog
 from kubernetes.dynamic import DynamicClient
+from ocp_resources.cron_job import CronJob
 from ocp_resources.llm_inference_service import LLMInferenceService
 from ocp_resources.maas_auth_policy import MaaSAuthPolicy
 from ocp_resources.maas_model_ref import MaaSModelRef
 from ocp_resources.maas_subscription import MaaSSubscription
 from ocp_resources.namespace import Namespace
+from ocp_resources.network_policy import NetworkPolicy
+from ocp_resources.pod import Pod
 from ocp_resources.resource import ResourceEditor
 from ocp_resources.service_account import ServiceAccount
 from pytest_testconfig import config as py_config
 
 from tests.model_serving.maas_billing.maas_subscription.utils import (
+    assert_api_key_created_ok,
     create_and_yield_api_key_id,
     create_api_key,
     create_maas_subscription,
+    get_maas_api_labels,
     patch_llmisvc_with_maas_router_and_tiers,
     resolve_api_key_username,
     revoke_api_key,
@@ -203,6 +208,191 @@ def maas_headers_for_actor_api_key(maas_api_key_for_actor: str) -> dict[str, str
     return build_maas_headers(token=maas_api_key_for_actor)
 
 
+@pytest.fixture(scope="function")
+def extra_subscription_with_api_key(
+    request_session_http: requests.Session,
+    base_url: str,
+    ocp_token_for_actor: str,
+    admin_client: DynamicClient,
+    maas_free_group: str,
+    maas_model_tinyllama_free: MaaSModelRef,
+    maas_subscription_namespace: Namespace,
+    maas_subscription_tinyllama_free: MaaSSubscription,
+    maas_subscription_controller_enabled_latest: None,
+    maas_gateway_api: None,
+    maas_api_gateway_reachable: None,
+) -> Generator[str, Any, Any]:
+    """
+    Creates an extra subscription (for nonexistent-group, priority=1) and an API key
+    bound to the original free subscription. Verifies the user's key still works even
+    with a second subscription present (OR-logic fix). Revokes key on teardown.
+    """
+    with create_maas_subscription(
+        admin_client=admin_client,
+        subscription_namespace=maas_subscription_namespace.name,
+        subscription_name="extra-subscription",
+        owner_group_name="nonexistent-group-xyz",
+        model_name=maas_model_tinyllama_free.name,
+        model_namespace=maas_model_tinyllama_free.namespace,
+        tokens_per_minute=999,
+        window="1m",
+        priority=1,
+        teardown=True,
+        wait_for_resource=True,
+    ) as extra_subscription:
+        extra_subscription.wait_for_condition(condition="Ready", status="True", timeout=300)
+        _, body = create_api_key(
+            base_url=base_url,
+            ocp_user_token=ocp_token_for_actor,
+            request_session_http=request_session_http,
+            api_key_name=f"e2e-one-of-two-{generate_random_name()}",
+            subscription=maas_subscription_tinyllama_free.name,
+        )
+        yield body["key"]
+        revoke_api_key(
+            request_session_http=request_session_http,
+            base_url=base_url,
+            key_id=body["id"],
+            ocp_user_token=ocp_token_for_actor,
+        )
+
+
+@pytest.fixture(scope="function")
+def high_tier_subscription_with_api_key(
+    request_session_http: requests.Session,
+    base_url: str,
+    ocp_token_for_actor: str,
+    admin_client: DynamicClient,
+    maas_free_group: str,
+    maas_model_tinyllama_free: MaaSModelRef,
+    maas_subscription_namespace: Namespace,
+    maas_subscription_tinyllama_free: MaaSSubscription,
+    maas_subscription_controller_enabled_latest: None,
+    maas_gateway_api: None,
+    maas_api_gateway_reachable: None,
+) -> Generator[str, Any, Any]:
+    """
+    Creates a high-priority subscription (priority=10) for the free group and an API key
+    bound to it. Returns the API key. Revokes key and cleans up subscription on teardown.
+    """
+    with create_maas_subscription(
+        admin_client=admin_client,
+        subscription_namespace=maas_subscription_namespace.name,
+        subscription_name="high-tier-subscription",
+        owner_group_name=maas_free_group,
+        model_name=maas_model_tinyllama_free.name,
+        model_namespace=maas_model_tinyllama_free.namespace,
+        tokens_per_minute=9999,
+        window="1m",
+        priority=10,
+        teardown=True,
+        wait_for_resource=True,
+    ) as high_tier_subscription:
+        high_tier_subscription.wait_for_condition(condition="Ready", status="True", timeout=300)
+        _, body = create_api_key(
+            base_url=base_url,
+            ocp_user_token=ocp_token_for_actor,
+            request_session_http=request_session_http,
+            api_key_name=f"e2e-high-tier-{generate_random_name()}",
+            subscription=high_tier_subscription.name,
+        )
+        yield body["key"]
+        revoke_api_key(
+            request_session_http=request_session_http,
+            base_url=base_url,
+            key_id=body["id"],
+            ocp_user_token=ocp_token_for_actor,
+        )
+
+
+@pytest.fixture(scope="function")
+def api_key_bound_to_system_auth_subscription(
+    request_session_http: requests.Session,
+    base_url: str,
+    ocp_token_for_actor: str,
+    premium_system_authenticated_access: dict,
+    maas_subscription_controller_enabled_latest: None,
+    maas_gateway_api: None,
+    maas_api_gateway_reachable: None,
+) -> Generator[str, Any, Any]:
+    """
+    API key bound to the system:authenticated subscription on the premium model.
+    Used for tests that verify OR-logic auth policy access. Revoked on teardown.
+    """
+    _, body = create_api_key(
+        base_url=base_url,
+        ocp_user_token=ocp_token_for_actor,
+        request_session_http=request_session_http,
+        api_key_name=f"e2e-system-auth-{generate_random_name()}",
+        subscription=premium_system_authenticated_access["subscription"].name,
+    )
+    yield body["key"]
+    revoke_api_key(
+        request_session_http=request_session_http,
+        base_url=base_url,
+        key_id=body["id"],
+        ocp_user_token=ocp_token_for_actor,
+    )
+
+
+@pytest.fixture(scope="class")
+def api_key_bound_to_free_subscription(
+    request_session_http: requests.Session,
+    base_url: str,
+    ocp_token_for_actor: str,
+    maas_subscription_tinyllama_free: MaaSSubscription,
+    maas_subscription_controller_enabled_latest: None,
+    maas_gateway_api: None,
+    maas_api_gateway_reachable: None,
+) -> Generator[str, Any, Any]:
+    """
+    API key bound to the free subscription at mint time. Revoked on teardown.
+    """
+    _, body = create_api_key(
+        base_url=base_url,
+        ocp_user_token=ocp_token_for_actor,
+        request_session_http=request_session_http,
+        api_key_name=f"e2e-auth-enforce-{generate_random_name()}",
+        subscription=maas_subscription_tinyllama_free.name,
+    )
+    yield body["key"]
+    revoke_api_key(
+        request_session_http=request_session_http,
+        base_url=base_url,
+        key_id=body["id"],
+        ocp_user_token=ocp_token_for_actor,
+    )
+
+
+@pytest.fixture(scope="class")
+def api_key_bound_to_premium_subscription(
+    request_session_http: requests.Session,
+    base_url: str,
+    ocp_token_for_actor: str,
+    maas_subscription_tinyllama_premium: MaaSSubscription,
+    maas_subscription_controller_enabled_latest: None,
+    maas_gateway_api: None,
+    maas_api_gateway_reachable: None,
+) -> Generator[str, Any, Any]:
+    """
+    API key bound to the premium subscription at mint time. Revoked on teardown.
+    """
+    _, body = create_api_key(
+        base_url=base_url,
+        ocp_user_token=ocp_token_for_actor,
+        request_session_http=request_session_http,
+        api_key_name=f"e2e-sub-enforce-{generate_random_name()}",
+        subscription=maas_subscription_tinyllama_premium.name,
+    )
+    yield body["key"]
+    revoke_api_key(
+        request_session_http=request_session_http,
+        base_url=base_url,
+        key_id=body["id"],
+        ocp_user_token=ocp_token_for_actor,
+    )
+
+
 @pytest.fixture(scope="class")
 def maas_wrong_group_service_account_token(
     maas_api_server_url: str,
@@ -311,7 +501,7 @@ def premium_system_authenticated_access(
             model_namespace=maas_model_tinyllama_premium.namespace,
             tokens_per_minute=100,
             window="1m",
-            priority=0,
+            priority=1,
             teardown=True,
             wait_for_resource=True,
         ) as system_authenticated_subscription,
@@ -601,3 +791,87 @@ def short_expiration_api_key_id(
         key_name_prefix="e2e-exp-short",
         expires_in="1h",
     )
+
+
+@pytest.fixture()
+def maas_cleanup_cronjob(
+    admin_client: DynamicClient,
+) -> CronJob:
+    """Return the maas-api-key-cleanup CronJob, asserting it exists."""
+    applications_namespace = py_config["applications_namespace"]
+    cronjob = CronJob(
+        client=admin_client,
+        name="maas-api-key-cleanup",
+        namespace=applications_namespace,
+    )
+    assert cronjob.exists, f"CronJob maas-api-key-cleanup not found in {applications_namespace}"
+    return cronjob
+
+
+@pytest.fixture()
+def maas_cleanup_networkpolicy(
+    admin_client: DynamicClient,
+) -> NetworkPolicy:
+    """Return the maas-api-cleanup-restrict NetworkPolicy, asserting it exists."""
+    applications_namespace = py_config["applications_namespace"]
+    network_policy = NetworkPolicy(
+        client=admin_client,
+        name="maas-api-cleanup-restrict",
+        namespace=applications_namespace,
+    )
+    assert network_policy.exists, f"NetworkPolicy maas-api-cleanup-restrict not found in {applications_namespace}"
+    return network_policy
+
+
+@pytest.fixture()
+def maas_api_pod_name(
+    admin_client: DynamicClient,
+) -> str:
+    """Return the name of the single running maas-api pod (exactly one pod is expected)."""
+    applications_namespace = py_config["applications_namespace"]
+    label_selector = ",".join(f"{k}={v}" for k, v in get_maas_api_labels().items())
+    pods = list(
+        Pod.get(
+            client=admin_client,
+            namespace=applications_namespace,
+            label_selector=label_selector,
+        )
+    )
+    assert len(pods) == 1, f"Expected exactly 1 maas-api pod in {applications_namespace}, found {len(pods)}"
+    assert pods[0].instance.status.phase == "Running", (
+        f"maas-api pod '{pods[0].name}' is not Running (phase={pods[0].instance.status.phase})"
+    )
+    return pods[0].name
+
+
+@pytest.fixture()
+def ephemeral_api_key(
+    request_session_http: requests.Session,
+    base_url: str,
+    ocp_token_for_actor: str,
+) -> Generator[dict[str, Any]]:
+    """Create an ephemeral API key and revoke it on teardown."""
+    creation_response, api_key_data = create_api_key(
+        base_url=base_url,
+        ocp_user_token=ocp_token_for_actor,
+        request_session_http=request_session_http,
+        api_key_name=f"e2e-ephemeral-{generate_random_name()}",
+        expires_in="1h",
+        ephemeral=True,
+        raise_on_error=False,
+    )
+    assert_api_key_created_ok(resp=creation_response, body=api_key_data, required_fields=("key", "id"))
+    LOGGER.info(
+        f"[ephemeral] Created ephemeral key: id={api_key_data['id']}, expiresAt={api_key_data.get('expiresAt')}"
+    )
+    yield api_key_data
+    revoke_response, _ = revoke_api_key(
+        request_session_http=request_session_http,
+        base_url=base_url,
+        key_id=api_key_data["id"],
+        ocp_user_token=ocp_token_for_actor,
+    )
+    if revoke_response.status_code not in (200, 404):
+        raise AssertionError(
+            f"Unexpected teardown status for ephemeral key id={api_key_data['id']}: {revoke_response.status_code}"
+        )

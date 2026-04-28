@@ -5,36 +5,24 @@ import pytest
 import requests
 import structlog
 from kubernetes.dynamic import DynamicClient
-from ocp_resources.cron_job import CronJob
 from ocp_resources.llm_inference_service import LLMInferenceService
 from ocp_resources.maas_auth_policy import MaaSAuthPolicy
 from ocp_resources.maas_model_ref import MaaSModelRef
 from ocp_resources.maas_subscription import MaaSSubscription
 from ocp_resources.namespace import Namespace
-from ocp_resources.network_policy import NetworkPolicy
-from ocp_resources.pod import Pod
-from ocp_resources.resource import ResourceEditor
 from ocp_resources.service_account import ServiceAccount
 from pytest_testconfig import config as py_config
 
 from tests.model_serving.maas_billing.maas_subscription.utils import (
-    assert_api_key_created_ok,
-    create_and_yield_api_key_id,
-    create_api_key,
     create_maas_subscription,
-    get_maas_api_labels,
     patch_llmisvc_with_maas_router_and_tiers,
-    resolve_api_key_username,
-    revoke_api_key,
-    wait_for_auth_ready,
 )
-from tests.model_serving.maas_billing.utils import build_maas_headers
+from tests.model_serving.maas_billing.utils import build_maas_headers, create_api_key, revoke_api_key
 from utilities.general import generate_random_name
-from utilities.infra import create_inference_token, get_openshift_token, login_with_user_password
+from utilities.infra import create_inference_token, login_with_user_password
 from utilities.llmd_constants import ContainerImages, ModelStorage
 from utilities.llmd_utils import create_llmisvc
 from utilities.plugins.constant import OpenAIEnpoints
-from utilities.resources.auth import Auth
 
 LOGGER = structlog.get_logger(name=__name__)
 
@@ -145,6 +133,12 @@ def maas_subscription_tinyllama_premium(
     ) as maas_subscription_premium:
         maas_subscription_premium.wait_for_condition(condition="Ready", status="True", timeout=300)
         yield maas_subscription_premium
+
+
+@pytest.fixture(scope="class")
+def models_url(base_url: str) -> str:
+    """GET /v1/models endpoint URL."""
+    return f"{base_url}/v1/models"
 
 
 @pytest.fixture(scope="class")
@@ -393,6 +387,116 @@ def api_key_bound_to_premium_subscription(
     )
 
 
+@pytest.fixture(scope="function")
+def deleted_sub_service_account(
+    admin_client: DynamicClient,
+    maas_api_server_url: str,
+    original_user: str,
+) -> Generator[str, Any, Any]:
+    """Create a dedicated SA and return its token for deleted-subscription testing."""
+    sa_name = f"e2e-deleted-sub-sa-{generate_random_name()}"
+    applications_namespace = py_config["applications_namespace"]
+
+    with ServiceAccount(
+        client=admin_client,
+        namespace=applications_namespace,
+        name=sa_name,
+        teardown=True,
+    ) as sa:
+        sa.wait(timeout=60)
+
+        ok = login_with_user_password(api_address=maas_api_server_url, user=original_user)
+        assert ok, f"Failed to login as original_user={original_user}"
+
+        yield create_inference_token(model_service_account=sa)
+
+
+@pytest.fixture(scope="function")
+def api_key_for_deleted_subscription(
+    request_session_http: requests.Session,
+    base_url: str,
+    admin_client: DynamicClient,
+    deleted_sub_service_account: str,
+    maas_model_tinyllama_free: MaaSModelRef,
+    maas_subscription_tinyllama_free: MaaSSubscription,
+) -> Generator[str, Any, Any]:
+    """Create an API key bound to a temp subscription, then delete the subscription.
+
+    Returns the plaintext API key whose subscription no longer exists.
+    """
+    temp_sub_name = f"e2e-deleted-sub-{generate_random_name()}"
+
+    with create_maas_subscription(
+        admin_client=admin_client,
+        subscription_namespace=maas_subscription_tinyllama_free.namespace,
+        subscription_name=temp_sub_name,
+        owner_group_name="system:authenticated",
+        model_name=maas_model_tinyllama_free.name,
+        model_namespace=maas_model_tinyllama_free.namespace,
+        tokens_per_minute=100,
+        window="1m",
+        priority=20,
+        teardown=True,
+        wait_for_resource=True,
+    ) as temp_subscription:
+        temp_subscription.wait_for_condition(condition="Ready", status="True", timeout=300)
+
+        _, body = create_api_key(
+            base_url=base_url,
+            ocp_user_token=deleted_sub_service_account,
+            request_session_http=request_session_http,
+            api_key_name=f"e2e-deleted-sub-key-{generate_random_name()}",
+            subscription=temp_sub_name,
+        )
+        api_key_plaintext = body["key"]
+        LOGGER.info(f"api_key_for_deleted_subscription: created key id={body['id']} bound to '{temp_sub_name}'")
+
+    LOGGER.info(f"api_key_for_deleted_subscription: subscription '{temp_sub_name}' deleted")
+    yield api_key_plaintext
+
+    revoke_api_key(
+        request_session_http=request_session_http,
+        base_url=base_url,
+        key_id=body["id"],
+        ocp_user_token=deleted_sub_service_account,
+    )
+
+
+@pytest.fixture(scope="class")
+def exhausted_token_quota(
+    request_session_http: requests.Session,
+    model_url_tinyllama_free: str,
+    api_key_bound_to_free_subscription: str,
+    maas_subscription_tinyllama_free: MaaSSubscription,
+) -> None:
+    """Exhaust the free-tier token quota by sending inference requests until 429."""
+    headers = build_maas_headers(token=api_key_bound_to_free_subscription)
+    headers["x-maas-subscription"] = maas_subscription_tinyllama_free.name
+
+    max_requests = 10
+    for attempt in range(max_requests):
+        response = request_session_http.post(
+            url=model_url_tinyllama_free,
+            headers=headers,
+            json={
+                "model": "llm-s3-tinyllama-free",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "max_tokens": 50,
+            },
+            timeout=60,
+        )
+        if response.status_code == 429:
+            LOGGER.info(f"[models] Rate limit hit after {attempt + 1} inference request(s)")
+            return
+
+        assert response.status_code == 200, (
+            f"Unexpected status {response.status_code} during inference "
+            f"(attempt {attempt + 1}): {(response.text or '')[:200]}"
+        )
+
+    pytest.fail(f"Could not exhaust token quota within {max_requests} requests")
+
+
 @pytest.fixture(scope="class")
 def maas_wrong_group_service_account_token(
     maas_api_server_url: str,
@@ -443,8 +547,8 @@ def temporary_system_authenticated_subscription(
         model_namespace=maas_model_tinyllama_free.namespace,
         tokens_per_minute=50,
         window="1m",
-        priority=0,
-        teardown=False,
+        priority=2,
+        teardown=True,
         wait_for_resource=True,
     ) as temporary_subscription:
         temporary_subscription.wait_for_condition(
@@ -530,38 +634,6 @@ def premium_system_authenticated_access(
 
 
 @pytest.fixture(scope="function")
-def second_free_subscription(
-    admin_client: DynamicClient,
-    maas_free_group: str,
-    maas_model_tinyllama_free: MaaSModelRef,
-    maas_subscription_tinyllama_free: MaaSSubscription,
-) -> Generator[MaaSSubscription, Any, Any]:
-    """
-    Creates a second subscription for maas_free_group on the free model.
-    Used to simulate an ambiguous subscription selection (two qualifying subscriptions,
-    no x-maas-subscription header).
-    """
-    with create_maas_subscription(
-        admin_client=admin_client,
-        subscription_namespace=maas_subscription_tinyllama_free.namespace,
-        subscription_name="e2e-second-free-subscription",
-        owner_group_name=maas_free_group,
-        model_name=maas_model_tinyllama_free.name,
-        model_namespace=maas_model_tinyllama_free.namespace,
-        tokens_per_minute=500,
-        window="1m",
-        priority=5,
-        teardown=True,
-        wait_for_resource=True,
-    ) as second_subscription:
-        second_subscription.wait_for_condition(condition="Ready", status="True", timeout=300)
-        LOGGER.info(
-            f"Created second free subscription {second_subscription.name} for model {maas_model_tinyllama_free.name}"
-        )
-        yield second_subscription
-
-
-@pytest.fixture(scope="function")
 def free_actor_premium_subscription(
     admin_client: DynamicClient,
     maas_model_tinyllama_premium: MaaSModelRef,
@@ -581,7 +653,7 @@ def free_actor_premium_subscription(
         model_namespace=maas_model_tinyllama_premium.namespace,
         tokens_per_minute=100,
         window="1m",
-        priority=0,
+        priority=5,
         teardown=True,
         wait_for_resource=True,
     ) as sub_for_free_actor:
@@ -591,287 +663,3 @@ def free_actor_premium_subscription(
             f"on premium model {maas_model_tinyllama_premium.name}"
         )
         yield sub_for_free_actor
-
-
-@pytest.fixture(scope="function")
-def two_active_api_key_ids(
-    request_session_http: requests.Session,
-    base_url: str,
-    ocp_token_for_actor: str,
-) -> Generator[list[str], Any, Any]:
-    """
-    Create two active API keys and return their IDs for list tests.
-    """
-    ids = [
-        create_api_key(
-            base_url=base_url,
-            ocp_user_token=ocp_token_for_actor,
-            request_session_http=request_session_http,
-            api_key_name=f"e2e-fixture-list-{i}-{generate_random_name()}",
-        )[1]["id"]
-        for i in range(1, 3)
-    ]
-    LOGGER.info(f"two_active_api_key_ids: created keys {ids}")
-    yield ids
-    for key_id in ids:
-        LOGGER.info(f"Fixture teardown: revoking key {key_id}")
-        revoke_api_key(
-            request_session_http=request_session_http,
-            base_url=base_url,
-            key_id=key_id,
-            ocp_user_token=ocp_token_for_actor,
-        )
-
-
-@pytest.fixture(scope="function")
-def three_active_api_key_ids(
-    request_session_http: requests.Session,
-    base_url: str,
-    ocp_token_for_actor: str,
-) -> Generator[list[str], Any, Any]:
-    """Create three active API keys and yield their IDs for bulk-revoke tests."""
-    key_ids = [
-        create_api_key(
-            base_url=base_url,
-            ocp_user_token=ocp_token_for_actor,
-            request_session_http=request_session_http,
-            api_key_name=f"e2e-bulk-key-{index}-{generate_random_name()}",
-        )[1]["id"]
-        for index in range(1, 4)
-    ]
-    LOGGER.info(f"three_active_api_key_ids: created keys {key_ids}")
-    yield key_ids
-    for key_id in key_ids:
-        LOGGER.info(f"three_active_api_key_ids: teardown revoking key {key_id}")
-        revoke_resp, _ = revoke_api_key(
-            request_session_http=request_session_http,
-            base_url=base_url,
-            key_id=key_id,
-            ocp_user_token=ocp_token_for_actor,
-        )
-        if revoke_resp.status_code not in (200, 404):
-            raise AssertionError(f"Unexpected teardown status for key id={key_id}: {revoke_resp.status_code}")
-
-
-@pytest.fixture(scope="function")
-def active_api_key_id(
-    request_session_http: requests.Session,
-    base_url: str,
-    ocp_token_for_actor: str,
-) -> Generator[str, Any, Any]:
-    """
-    Create a single active API key and return its ID for revoke tests.
-    """
-    yield from create_and_yield_api_key_id(
-        request_session_http=request_session_http,
-        base_url=base_url,
-        ocp_user_token=ocp_token_for_actor,
-        key_name_prefix="e2e-fixture-key",
-    )
-
-
-@pytest.fixture(scope="function")
-def free_user_username(
-    request_session_http: requests.Session,
-    base_url: str,
-    ocp_token_for_actor: str,
-    active_api_key_id: str,
-) -> str:
-    """Resolve and return the free (non-admin) actor's username from their active API key."""
-    username = resolve_api_key_username(
-        request_session_http=request_session_http,
-        base_url=base_url,
-        key_id=active_api_key_id,
-        ocp_user_token=ocp_token_for_actor,
-    )
-    LOGGER.info(f"free_user_username: resolved username from key id={active_api_key_id}")
-    return username
-
-
-@pytest.fixture(scope="function")
-def admin_username(
-    request_session_http: requests.Session,
-    base_url: str,
-    admin_ocp_token: str,
-    admin_active_api_key_id: str,
-) -> str:
-    """Resolve and return the admin actor's username from their active API key."""
-    username = resolve_api_key_username(
-        request_session_http=request_session_http,
-        base_url=base_url,
-        key_id=admin_active_api_key_id,
-        ocp_user_token=admin_ocp_token,
-    )
-    LOGGER.info(f"admin_username: resolved username from key id={admin_active_api_key_id}")
-    return username
-
-
-@pytest.fixture(scope="function")
-def admin_active_api_key_id(
-    request_session_http: requests.Session,
-    base_url: str,
-    admin_ocp_token: str,
-) -> Generator[str, Any, Any]:
-    """Create an active API key as the admin user, yield its ID, and revoke on teardown."""
-    yield from create_and_yield_api_key_id(
-        request_session_http=request_session_http,
-        base_url=base_url,
-        ocp_user_token=admin_ocp_token,
-        key_name_prefix="e2e-authz-admin",
-    )
-
-
-@pytest.fixture(scope="class")
-def admin_ocp_token(admin_client: DynamicClient) -> Generator[str, Any, Any]:
-    """Temporarily adds dedicated-admins to Auth CR adminGroups so the admin token is recognised by MaaS."""
-    auth = Auth(client=admin_client, name="auth")
-    current_groups: list[str] = list(auth.instance.spec.adminGroups or [])
-    patched_groups = list(set(current_groups + ["dedicated-admins"]))
-
-    auth_conditions = (auth.instance.status or {}).get("conditions") or []
-    ready_before = next(
-        (condition for condition in auth_conditions if condition.get("type") == "Ready"),
-        {},
-    )
-    baseline_time: str = ready_before.get("lastTransitionTime", "")
-
-    LOGGER.info(f"admin_ocp_token: patching Auth CR adminGroups to {patched_groups}")
-    with ResourceEditor(patches={auth: {"spec": {"adminGroups": patched_groups}}}):
-        wait_for_auth_ready(auth=auth, baseline_time=baseline_time)
-        auth_conditions_after = (auth.instance.status or {}).get("conditions") or []
-        ready_after = next(
-            (condition for condition in auth_conditions_after if condition.get("type") == "Ready"),
-            {},
-        )
-        cleanup_baseline_time: str = ready_after.get("lastTransitionTime", "")
-        yield get_openshift_token(client=admin_client)
-
-    wait_for_auth_ready(auth=auth, baseline_time=cleanup_baseline_time)
-
-
-@pytest.fixture(scope="function")
-def revoked_api_key_id(
-    request_session_http: requests.Session,
-    base_url: str,
-    ocp_token_for_actor: str,
-    active_api_key_id: str,
-) -> str:
-    """
-    Revoke the active API key and return its ID.
-
-    Asserts the DELETE response confirms status='revoked'.
-    Used as a precondition fixture for tests that verify revoked state persists.
-    """
-    revoke_resp, revoke_body = revoke_api_key(
-        request_session_http=request_session_http,
-        base_url=base_url,
-        key_id=active_api_key_id,
-        ocp_user_token=ocp_token_for_actor,
-    )
-    assert revoke_resp.status_code == 200, (
-        f"Expected 200 on DELETE /v1/api-keys/{active_api_key_id}, "
-        f"got {revoke_resp.status_code}: {revoke_resp.text[:200]}"
-    )
-    assert revoke_body.get("status") == "revoked", f"Expected status='revoked' in DELETE response, got: {revoke_body}"
-    LOGGER.info(f"revoked_api_key_id: revoked key id={active_api_key_id}")
-    return active_api_key_id
-
-
-@pytest.fixture(scope="function")
-def short_expiration_api_key_id(
-    request_session_http: requests.Session,
-    base_url: str,
-    ocp_token_for_actor: str,
-) -> Generator[str, Any, Any]:
-    """Create an API key with 1-hour expiration, yield its ID, and revoke on teardown."""
-    yield from create_and_yield_api_key_id(
-        request_session_http=request_session_http,
-        base_url=base_url,
-        ocp_user_token=ocp_token_for_actor,
-        key_name_prefix="e2e-exp-short",
-        expires_in="1h",
-    )
-
-
-@pytest.fixture()
-def maas_cleanup_cronjob(
-    admin_client: DynamicClient,
-) -> CronJob:
-    """Return the maas-api-key-cleanup CronJob, asserting it exists."""
-    applications_namespace = py_config["applications_namespace"]
-    cronjob = CronJob(
-        client=admin_client,
-        name="maas-api-key-cleanup",
-        namespace=applications_namespace,
-    )
-    assert cronjob.exists, f"CronJob maas-api-key-cleanup not found in {applications_namespace}"
-    return cronjob
-
-
-@pytest.fixture()
-def maas_cleanup_networkpolicy(
-    admin_client: DynamicClient,
-) -> NetworkPolicy:
-    """Return the maas-api-cleanup-restrict NetworkPolicy, asserting it exists."""
-    applications_namespace = py_config["applications_namespace"]
-    network_policy = NetworkPolicy(
-        client=admin_client,
-        name="maas-api-cleanup-restrict",
-        namespace=applications_namespace,
-    )
-    assert network_policy.exists, f"NetworkPolicy maas-api-cleanup-restrict not found in {applications_namespace}"
-    return network_policy
-
-
-@pytest.fixture()
-def maas_api_pod_name(
-    admin_client: DynamicClient,
-) -> str:
-    """Return the name of the single running maas-api pod (exactly one pod is expected)."""
-    applications_namespace = py_config["applications_namespace"]
-    label_selector = ",".join(f"{k}={v}" for k, v in get_maas_api_labels().items())
-    pods = list(
-        Pod.get(
-            client=admin_client,
-            namespace=applications_namespace,
-            label_selector=label_selector,
-        )
-    )
-    assert len(pods) == 1, f"Expected exactly 1 maas-api pod in {applications_namespace}, found {len(pods)}"
-    assert pods[0].instance.status.phase == "Running", (
-        f"maas-api pod '{pods[0].name}' is not Running (phase={pods[0].instance.status.phase})"
-    )
-    return pods[0].name
-
-
-@pytest.fixture()
-def ephemeral_api_key(
-    request_session_http: requests.Session,
-    base_url: str,
-    ocp_token_for_actor: str,
-) -> Generator[dict[str, Any]]:
-    """Create an ephemeral API key and revoke it on teardown."""
-    creation_response, api_key_data = create_api_key(
-        base_url=base_url,
-        ocp_user_token=ocp_token_for_actor,
-        request_session_http=request_session_http,
-        api_key_name=f"e2e-ephemeral-{generate_random_name()}",
-        expires_in="1h",
-        ephemeral=True,
-        raise_on_error=False,
-    )
-    assert_api_key_created_ok(resp=creation_response, body=api_key_data, required_fields=("key", "id"))
-    LOGGER.info(
-        f"[ephemeral] Created ephemeral key: id={api_key_data['id']}, expiresAt={api_key_data.get('expiresAt')}"
-    )
-    yield api_key_data
-    revoke_response, _ = revoke_api_key(
-        request_session_http=request_session_http,
-        base_url=base_url,
-        key_id=api_key_data["id"],
-        ocp_user_token=ocp_token_for_actor,
-    )
-    if revoke_response.status_code not in (200, 404):
-        raise AssertionError(
-            f"Unexpected teardown status for ephemeral key id={api_key_data['id']}: {revoke_response.status_code}"
-        )

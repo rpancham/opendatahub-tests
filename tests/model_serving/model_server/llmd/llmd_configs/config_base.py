@@ -89,7 +89,7 @@ class LLMISvcConfig:
             f"  replicas:        {cls.replicas}",
             f"  container_image: {cls.container_image or '(default)'}",
             f"  auth:            {cls.annotations().get('security.opendatahub.io/enable-auth', 'false')}",
-            border,
+            border + "\n",
         ]
         return "\n".join(lines)
 
@@ -131,7 +131,7 @@ class GpuConfig(LLMISvcConfig):
     """GPU inference base. Sets GPU resource limits."""
 
     enable_auth = False
-    wait_timeout = 480
+    wait_timeout = 600
 
     @classmethod
     def container_resources(cls):

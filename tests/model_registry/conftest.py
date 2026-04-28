@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 import structlog
-import yaml
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.config_map import ConfigMap
 from ocp_resources.data_science_cluster import DataScienceCluster
@@ -20,23 +19,17 @@ from ocp_resources.route import Route
 from ocp_resources.secret import Secret
 from ocp_resources.service import Service
 from ocp_resources.service_account import ServiceAccount
-from pytest import Config, FixtureRequest
+from pytest import Config, FixtureRequest, Item
 from pytest_testconfig import config as py_config
 
 from tests.model_registry.constants import (
     DB_BASE_RESOURCES_NAME,
     DB_RESOURCE_NAME,
-    DEFAULT_CUSTOM_MODEL_CATALOG,
     KUBERBACPROXY_STR,
+    MCP_CATALOG_API_PATH,
     MR_INSTANCE_BASE_NAME,
     MR_INSTANCE_NAME,
     MR_OPERATOR_NAME,
-)
-from tests.model_registry.mcp_servers.constants import (
-    MCP_CATALOG_API_PATH,
-    MCP_CATALOG_SOURCE,
-    MCP_SERVERS_YAML,
-    NAMED_QUERIES,
 )
 from tests.model_registry.utils import (
     generate_namespace_name,
@@ -45,8 +38,6 @@ from tests.model_registry.utils import (
     get_model_registry_objects,
     get_rest_headers,
     wait_for_default_resource_cleanedup,
-    wait_for_mcp_catalog_api,
-    wait_for_model_catalog_pod_ready_after_deletion,
 )
 from utilities.constants import DscComponents, Labels
 from utilities.general import (
@@ -55,7 +46,12 @@ from utilities.general import (
     wait_for_pods_by_labels,
     wait_for_pods_running,
 )
-from utilities.infra import get_data_science_cluster, login_with_user_password, wait_for_dsc_status_ready
+from utilities.infra import (
+    ResourceNotFoundError,
+    get_data_science_cluster,
+    login_with_user_password,
+    wait_for_dsc_status_ready,
+)
 from utilities.resources.model_registry_modelregistry_opendatahub_io import ModelRegistry
 from utilities.user_utils import UserTestSession, create_htpasswd_file, wait_for_user_creation
 
@@ -66,6 +62,24 @@ LOGGER = structlog.get_logger(name=__name__)
 @pytest.fixture(scope="session")
 def model_registry_namespace(updated_dsc_component_state_scope_session: DataScienceCluster) -> str:
     return updated_dsc_component_state_scope_session.instance.spec.components.modelregistry.registriesNamespace
+
+
+@pytest.fixture(scope="session")
+def async_upload_image(admin_client: DynamicClient) -> str:
+    """Async upload job image from the model-registry-operator-parameters ConfigMap."""
+    config_map = ConfigMap(
+        client=admin_client,
+        name="model-registry-operator-parameters",
+        namespace=py_config["applications_namespace"],
+    )
+
+    if not config_map.exists:
+        raise ResourceNotFoundError(
+            f"ConfigMap 'model-registry-operator-parameters' not found in"
+            f" namespace '{py_config['applications_namespace']}'"
+        )
+
+    return config_map.instance.data["IMAGES_JOBS_ASYNC_UPLOAD"]
 
 
 @pytest.fixture(scope="session")
@@ -485,47 +499,29 @@ def mcp_catalog_rest_urls(model_registry_namespace: str, model_catalog_routes: l
     return [f"https://{route.instance.spec.host}:443{MCP_CATALOG_API_PATH}" for route in model_catalog_routes]
 
 
-@pytest.fixture(scope="class")
-def mcp_servers_configmap_patch(
-    admin_client: DynamicClient,
-    model_registry_namespace: str,
-    mcp_catalog_rest_urls: list[str],
-    model_registry_rest_headers: dict[str, str],
-) -> Generator[None]:
-    """
-    Class-scoped fixture that patches the model-catalog-sources ConfigMap.
+def pytest_collection_modifyitems(items: list[Item], config: pytest.Config) -> None:
+    """Deselect tests based on parametrize values that produce invalid combinations."""
+    deselected = []
+    remaining = []
+    for item in items:
+        callspec = getattr(item, "callspec", None)
+        if callspec:
+            if "test_requires_default_db" in item.keywords:
+                db_name = callspec.params.get("model_registry_metadata_db_resources", {}).get("db_name")
+                if db_name != "default":
+                    deselected.append(item)
+                    continue
+            if "test_huggingface_source" in item.keywords and "test_skip_on_huggingface_source" in item.keywords:
+                deselected.append(item)
+                continue
+            if (
+                "test_postgres_network_policy_only" in item.keywords
+                and callspec.params.get("model_catalog_network_policy") == "model-catalog-https-route"
+            ):
+                deselected.append(item)
+                continue
+        remaining.append(item)
 
-    Sets two keys in the ConfigMap data:
-    - sources.yaml: catalog source definition pointing to the MCP servers YAML,
-      plus named queries for filtering by custom properties
-    - mcp-servers.yaml: the actual MCP server definitions
-    """
-    catalog_config_map = ConfigMap(
-        name=DEFAULT_CUSTOM_MODEL_CATALOG,
-        client=admin_client,
-        namespace=model_registry_namespace,
-    )
-
-    current_data = yaml.safe_load(catalog_config_map.instance.data.get("sources.yaml", "{}") or "{}")
-    if "mcp_catalogs" not in current_data:
-        current_data["mcp_catalogs"] = []
-    current_data["mcp_catalogs"].append(MCP_CATALOG_SOURCE)
-    current_data["namedQueries"] = NAMED_QUERIES
-
-    patches = {
-        "data": {
-            "sources.yaml": yaml.dump(current_data, default_flow_style=False),
-            "mcp-servers.yaml": MCP_SERVERS_YAML,
-        }
-    }
-
-    with ResourceEditor(patches={catalog_config_map: patches}):
-        wait_for_model_catalog_pod_ready_after_deletion(
-            client=admin_client, model_registry_namespace=model_registry_namespace
-        )
-        wait_for_mcp_catalog_api(url=mcp_catalog_rest_urls[0], headers=model_registry_rest_headers)
-        yield
-
-    wait_for_model_catalog_pod_ready_after_deletion(
-        client=admin_client, model_registry_namespace=model_registry_namespace
-    )
+    if deselected:
+        items[:] = remaining
+        config.hook.pytest_deselected(items=deselected)

@@ -1,8 +1,5 @@
 import base64
-import secrets
-import string
 from collections.abc import Generator
-from contextlib import ExitStack
 from typing import Any
 
 import pytest
@@ -29,12 +26,9 @@ from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutSampler
 
 from tests.model_serving.maas_billing.maas_subscription.utils import (
-    MAAS_DB_NAMESPACE,
     MAAS_SUBSCRIPTION_NAMESPACE,
-    get_maas_postgres_resources,
+    create_maas_subscription,
     patch_llmisvc_with_maas_router_and_tiers,
-    wait_for_postgres_connection_log,
-    wait_for_postgres_deployment_ready,
 )
 from tests.model_serving.maas_billing.utils import (
     build_maas_headers,
@@ -64,6 +58,7 @@ from utilities.infra import create_ns, get_openshift_token, login_with_user_pass
 from utilities.llmd_constants import ContainerImages, ModelStorage
 from utilities.llmd_utils import create_llmisvc
 from utilities.plugins.constant import OpenAIEnpoints
+from utilities.resources.authorino import Authorino
 from utilities.resources.rate_limit_policy import RateLimitPolicy
 from utilities.resources.token_rate_limit_policy import TokenRateLimitPolicy
 from utilities.user_utils import UserTestSession, create_htpasswd_file, wait_for_user_creation
@@ -555,6 +550,12 @@ def maas_headers_for_actor(maas_token_for_actor: str) -> dict:
 
 
 @pytest.fixture(scope="class")
+def ocp_headers_for_actor(ocp_token_for_actor: str) -> dict[str, str]:
+    """Headers built from the OCP token for the current actor (admin/free/premium)."""
+    return build_maas_headers(token=ocp_token_for_actor)
+
+
+@pytest.fixture(scope="class")
 def maas_models_response_for_actor(
     request_session_http: requests.Session,
     base_url: str,
@@ -802,11 +803,102 @@ def maas_api_endpoints_ready(
             return
 
 
+@pytest.fixture(scope="session")
+def authorino_tls_configured(admin_client: DynamicClient) -> Generator[None, Any, Any]:
+    """Configure Authorino TLS for MaaS API communication."""
+    authorino_namespaces = ["rh-connectivity-link", "kuadrant-system"]
+    authorino_namespace = next(
+        (ns for ns in authorino_namespaces if Deployment(client=admin_client, name="authorino", namespace=ns).exists),
+        None,
+    )
+    if not authorino_namespace:
+        pytest.skip(f"Authorino deployment not found in {authorino_namespaces}")
+
+    LOGGER.info(f"authorino_tls_configured: configuring TLS in {authorino_namespace}")
+
+    authorino_service = Service(
+        client=admin_client,
+        name="authorino-authorino-authorization",
+        namespace=authorino_namespace,
+    )
+    service_patch = {
+        "metadata": {
+            "annotations": {
+                "service.beta.openshift.io/serving-cert-secret-name": "authorino-server-cert",
+            }
+        }
+    }
+
+    authorino_deployment = Deployment(
+        client=admin_client,
+        name="authorino",
+        namespace=authorino_namespace,
+    )
+    current_image = next(
+        c.image for c in authorino_deployment.instance.spec.template.spec.containers if c.name == "authorino"
+    )
+    deployment_patch = {
+        "spec": {
+            "template": {
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "authorino",
+                            "image": current_image,
+                            "env": [
+                                {
+                                    "name": "SSL_CERT_FILE",
+                                    "value": "/etc/ssl/certs/openshift-service-ca/service-ca-bundle.crt",
+                                },
+                                {
+                                    "name": "REQUESTS_CA_BUNDLE",
+                                    "value": "/etc/ssl/certs/openshift-service-ca/service-ca-bundle.crt",
+                                },
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    authorino_cr = Authorino(
+        client=admin_client,
+        name="authorino",
+        namespace=authorino_namespace,
+    )
+    authorino_patch = {
+        "spec": {
+            "listener": {
+                "tls": {
+                    "enabled": True,
+                    "certSecretRef": {"name": "authorino-server-cert"},
+                }
+            }
+        }
+    }
+
+    with ResourceEditor(
+        patches={
+            authorino_service: service_patch,
+            authorino_deployment: deployment_patch,
+            authorino_cr: authorino_patch,
+        }
+    ):
+        authorino_deployment.wait_for_condition(condition="Available", status="True", timeout=120)
+        LOGGER.info("authorino_tls_configured: TLS configuration applied, rollout complete")
+        yield
+
+    authorino_deployment.wait_for_condition(condition="Available", status="True", timeout=120)
+    LOGGER.info("authorino_tls_configured: TLS configuration removed, rollout complete")
+
+
 @pytest.fixture(scope="class")
 def maas_api_gateway_reachable(
     request_session_http: requests.Session,
     base_url: str,
     maas_api_endpoints_ready: None,
+    authorino_tls_configured: None,
 ) -> None:
     probe_url = f"{base_url}/v1/models"
 
@@ -974,69 +1066,6 @@ def revoke_maas_tokens_for_actor(
 
 
 @pytest.fixture(scope="session")
-def maas_postgres_credentials() -> dict[str, str]:
-    alphabet = string.ascii_letters + string.digits
-
-    postgres_user = f"maas-{generate_random_name()}"
-    postgres_db = f"maas-{generate_random_name()}"
-    postgres_password = "".join(secrets.choice(alphabet) for _ in range(32))
-
-    LOGGER.info(
-        f"Generated PostgreSQL test credentials: "
-        f"user={postgres_user}, db={postgres_db}, password_length={len(postgres_password)}"
-    )
-
-    return {
-        "postgres_user": postgres_user,
-        "postgres_password": postgres_password,
-        "postgres_db": postgres_db,
-    }
-
-
-@pytest.fixture(scope="session")
-def maas_postgres_prereqs(
-    admin_client: DynamicClient,
-    maas_postgres_credentials: dict[str, str],
-) -> Generator[dict[Any, Any], Any, Any]:
-    """
-    Prepare PostgreSQL resources required by maas-api before MaaS API key tests run.
-    """
-    resources = get_maas_postgres_resources(
-        client=admin_client,
-        namespace=MAAS_DB_NAMESPACE,
-        teardown_resources=True,
-        postgres_user=maas_postgres_credentials["postgres_user"],
-        postgres_password=maas_postgres_credentials["postgres_password"],
-        postgres_db=maas_postgres_credentials["postgres_db"],
-    )
-
-    resources_instances: dict[Any, Any] = {}
-
-    with ExitStack() as stack:
-        for kind_name in [Secret, Service, Deployment]:
-            resources_instances[kind_name] = []
-
-            for resource_obj in resources[kind_name]:
-                resources_instances[kind_name].append(stack.enter_context(resource_obj))
-
-        for deployment in resources_instances[Deployment]:
-            deployment.wait_for_condition(condition="Available", status="True", timeout=180)
-
-        wait_for_postgres_deployment_ready(
-            admin_client=admin_client,
-            namespace=MAAS_DB_NAMESPACE,
-            timeout=180,
-        )
-        wait_for_postgres_connection_log(
-            admin_client=admin_client,
-            namespace=MAAS_DB_NAMESPACE,
-            timeout=180,
-        )
-
-        yield resources_instances
-
-
-@pytest.fixture(scope="session")
 def maas_subscription_namespace(
     unprivileged_client: DynamicClient, admin_client: DynamicClient
 ) -> Generator[Namespace, Any, Any]:
@@ -1056,12 +1085,11 @@ def maas_subscription_namespace(
 @pytest.fixture(scope="session")
 def maas_subscription_controller_enabled_latest(
     dsc_resource: DataScienceCluster,
-    maas_postgres_prereqs: None,
     maas_gateway_api: None,
     maas_subscription_namespace: Namespace,
 ) -> Generator[DataScienceCluster, Any, Any]:
     """
-    ensures postgres prerequisites and subscription namespace exist before MaaS is switched to Managed.
+    Ensures subscription namespace exists before MaaS is switched to Managed.
     """
     component_patch = {
         DscComponents.KSERVE: {"modelsAsService": {"managementState": DscComponents.ManagementState.MANAGED}}
@@ -1190,3 +1218,40 @@ def maas_subscription_tinyllama_free(
     ) as maas_subscription_free:
         maas_subscription_free.wait_for_condition(condition="Ready", status="True", timeout=300)
         yield maas_subscription_free
+
+
+@pytest.fixture(scope="class")
+def minimal_subscription_for_free_user(
+    admin_client: DynamicClient,
+    maas_unprivileged_model_namespace,
+    maas_subscription_namespace,
+) -> Generator[Any, Any, Any]:
+    """Create a minimal MaaSModelRef + MaaSSubscription for system:authenticated."""
+    model_ns = maas_unprivileged_model_namespace.name
+    model_name = f"e2e-authz-model-{generate_random_name()}"
+    sub_name = f"e2e-authz-free-sub-{generate_random_name()}"
+
+    with (
+        MaaSModelRef(
+            client=admin_client,
+            name=model_name,
+            namespace=model_ns,
+            model_ref={"name": model_name, "namespace": model_ns, "kind": "LLMInferenceService"},
+            teardown=True,
+            wait_for_resource=True,
+        ) as model_ref,
+        create_maas_subscription(
+            admin_client=admin_client,
+            subscription_namespace=maas_subscription_namespace.name,
+            subscription_name=sub_name,
+            owner_group_name="system:authenticated",
+            model_name=model_ref.name,
+            model_namespace=model_ref.namespace,
+            tokens_per_minute=1000,
+            window="1m",
+            priority=0,
+            teardown=True,
+            wait_for_resource=True,
+        ) as subscription,
+    ):
+        yield subscription

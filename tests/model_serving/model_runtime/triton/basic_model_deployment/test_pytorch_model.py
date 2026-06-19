@@ -56,7 +56,10 @@ pytestmark = pytest.mark.usefixtures(
                 **BASE_RAW_DEPLOYMENT_CONFIG,
             },
             id="pytorch-raw-grpc-deployment",
-            marks=[pytest.mark.tier1, pytest.mark.skip(reason="RHOAI does not support gRPC protocol for Triton model serving")],
+            marks=[
+                pytest.mark.tier1,
+                pytest.mark.skip(reason="RHOAI does not support gRPC protocol for Triton model serving"),
+            ],
         ),
     ],
     indirect=True,

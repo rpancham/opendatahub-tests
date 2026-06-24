@@ -35,30 +35,27 @@ pytestmark = pytest.mark.usefixtures(
     [
         pytest.param(
             {"protocol_type": Protocols.REST},
-            {"name": "dali-raw"},
+            {"name": "dali-standard"},
             MODEL_STORAGE_URI_DICT,
             {**BASE_RAW_DEPLOYMENT_CONFIG},
             {
-                "name": "dali-raw-rest",
+                "name": "dali-standard-rest",
                 **BASE_RAW_DEPLOYMENT_CONFIG,
             },
-            id="dali-raw-rest-deployment",
-            marks=[pytest.mark.gpu],
+            id="dali-standard-rest-deployment",
+            marks=[pytest.mark.tier1, pytest.mark.gpu],
         ),
         pytest.param(
             {"protocol_type": Protocols.GRPC},
-            {"name": "dali-raw"},
+            {"name": "dali-standard"},
             MODEL_STORAGE_URI_DICT,
             {**BASE_RAW_DEPLOYMENT_CONFIG},
             {
-                "name": "dali-raw-grpc",
+                "name": "dali-standard-grpc",
                 **BASE_RAW_DEPLOYMENT_CONFIG,
             },
-            id="dali-raw-grpc-deployment",
-            marks=[
-                pytest.mark.gpu,
-                pytest.mark.skip(reason="RHOAI does not support gRPC protocol for Triton model serving"),
-            ],
+            id="dali-standard-grpc-deployment",
+            marks=[pytest.mark.tier1, pytest.mark.gpu],
         ),
     ],
     indirect=True,

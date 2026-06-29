@@ -8,7 +8,10 @@ import pytest
 from ocp_resources.inference_service import InferenceService
 from ocp_resources.pod import Pod
 
-from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import load_json, validate_inference_request
+from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import (
+    load_json,
+    validate_inference_request,
+)
 from tests.model_serving.model_runtime.triton.constant import (
     BASE_RAW_DEPLOYMENT_CONFIG,
     MODEL_PATH_PREFIX,
@@ -33,11 +36,13 @@ pytestmark = pytest.mark.usefixtures(
 @pytest.mark.tier1
 @pytest.mark.parametrize(
     (
-        "model_namespace, triton_model_pvc, triton_pvc_downloaded_model_data, "
-        "triton_pvc_serving_runtime, triton_pvc_inference_service"
+        "protocol, model_namespace, triton_model_pvc, "
+        "triton_pvc_downloaded_model_data, triton_pvc_serving_runtime, "
+        "triton_pvc_inference_service"
     ),
     [
         pytest.param(
+            {"protocol_type": Protocols.REST},
             {"name": "triton-pvc-onnx"},
             {"pvc-size": "10Gi"},
             MODEL_STORAGE_URI_DICT,

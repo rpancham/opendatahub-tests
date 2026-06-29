@@ -14,16 +14,10 @@ from pytest import FixtureRequest
 
 from tests.model_serving.model_runtime.triton.basic_model_deployment.utils import get_gpu_identifier
 from tests.model_serving.model_runtime.triton.constant import PREDICT_RESOURCES
-from utilities.constants import KServeDeploymentType, Protocols
+from utilities.constants import KServeDeploymentType
 from utilities.general import download_model_data
 from utilities.inference_utils import create_isvc
 from utilities.infra import get_pods_by_isvc_label
-
-
-@pytest.fixture(scope="class")
-def protocol() -> Generator[str, Any, Any]:
-    """Protocol fixture for Triton PVC tests - always REST."""
-    yield Protocols.REST
 
 
 @pytest.fixture(scope="class")

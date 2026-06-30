@@ -28,7 +28,6 @@ pytestmark = pytest.mark.usefixtures(
     "root_dir",
     "valid_aws_config",
     "skip_if_no_supported_accelerator_type",
-    "triton_rest_serving_runtime_template",
 )
 
 

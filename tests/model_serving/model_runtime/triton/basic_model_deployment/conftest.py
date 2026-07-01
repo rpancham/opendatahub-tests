@@ -245,6 +245,6 @@ def pytest_collection_modifyitems(config, items):
     remaining = []
     for item in items:
         # Remove any test with 'grpc-deployment' in the parameterized id
-        if 'grpc-deployment' not in item.nodeid:
+        if "grpc-deployment" not in item.nodeid:
             remaining.append(item)
     items[:] = remaining

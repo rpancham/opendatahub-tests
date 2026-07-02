@@ -24,7 +24,6 @@ MODEL_STORAGE_URI_DICT = {"model-dir": f"{MODEL_PATH_PREFIX}/{ModelFormat.OPENVI
 pytestmark = pytest.mark.usefixtures(
     "root_dir",
     "valid_aws_config",
-    "skip_if_no_supported_accelerator_type",
 )
 
 
@@ -44,7 +43,7 @@ pytestmark = pytest.mark.usefixtures(
             {
                 **BASE_RAW_DEPLOYMENT_CONFIG,
                 "gpu_count": 0,
-                "name": "openvino-pvc-ovms-standard",
+                "name": "openvino-pvc-standard",
             },
             id="test_openvino_pvc_ovms_standard",
         ),

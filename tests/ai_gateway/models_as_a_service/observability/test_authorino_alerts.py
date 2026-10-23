@@ -1,7 +1,7 @@
-"""Opt-in alert firing validation on a dedicated MaaS test cluster."""
+"""Alert firing validation on a dedicated MaaS test cluster."""
 
 import os
-from time import monotonic, sleep
+from time import monotonic
 from urllib.parse import urlsplit
 
 import pytest
@@ -10,6 +10,7 @@ import structlog
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.prometheus_rule import PrometheusRule
 from ocp_utilities.monitoring import Prometheus
+from timeout_sampler import TimeoutSampler
 
 from tests.ai_gateway.models_as_a_service.observability.authorino_alerts import query_alert_metrics
 
@@ -24,10 +25,6 @@ RECOVERY_TIMEOUT_SECONDS = 420
 @pytest.mark.tier3
 @pytest.mark.metrics
 @pytest.mark.slow
-@pytest.mark.skipif(
-    os.environ.get("MAAS_RUN_AUTHORINO_ALERT_TEST") != "true",
-    reason="Requires explicit opt-in and a dedicated cluster with shipped Authorino rules",
-)
 def test_authorino_authentication_alert_fires(
     admin_client: DynamicClient,
     prometheus: Prometheus,
@@ -40,12 +37,15 @@ def test_authorino_authentication_alert_fires(
     target = urlsplit(url=target_url)
     assert target.scheme == "https" and target.hostname, "Set MAAS_AUTHORINO_ALERT_MODEL_URL to a test model HTTPS URL"
     assert not (target.username or target.password or target.query or target.fragment), "Use a URL without credentials"
-    rules = [
-        rule
-        for rule in PrometheusRule.get(client=admin_client)
-        if rule.name == RULE_NAME and rule.namespace in ("kuadrant-system", "rh-connectivity-link")
-    ]
-    assert len(rules) == 1, "Expected exactly one installed Authorino authentication PrometheusRule"
+    rules = []
+    for namespace in ("kuadrant-system", "rh-connectivity-link"):
+        rule = PrometheusRule(client=admin_client, name=RULE_NAME, namespace=namespace)
+        if rule.exists:
+            rules.append(rule)
+    assert len(rules) == 1, (
+        "Expected exactly one installed authorino-maas-authentication-alerts PrometheusRule "
+        "in kuadrant-system or rh-connectivity-link; provision the release's monitoring prerequisites"
+    )
     rule_resource = rules[0]
     alert_rules = [
         rule
@@ -77,18 +77,21 @@ def test_authorino_authentication_alert_fires(
     next_poll = started
     try:
         with requests.Session() as session:
+            session.trust_env = False
             session.verify = prometheus.verify_ssl
             # No credentials: reject at gateway authentication before model inference.
-            for _ in range(FIRING_TIMEOUT_SECONDS):
-                if monotonic() - started >= FIRING_TIMEOUT_SECONDS:
-                    break
-                traffic_started = True
-                response = session.post(
-                    url=target_url,
-                    json={"messages": [{"role": "user", "content": "alert test"}], "max_tokens": 1},
-                    timeout=10,
-                    allow_redirects=False,
-                )
+            traffic_started = True
+            for response in TimeoutSampler(
+                wait_timeout=FIRING_TIMEOUT_SECONDS,
+                sleep=2,
+                func=session.post,
+                exceptions_dict={},
+                print_func_args=False,
+                url=target_url,
+                json={"messages": [{"role": "user", "content": "alert test"}], "max_tokens": 1},
+                timeout=10,
+                allow_redirects=False,
+            ):
                 assert response.status_code == 401, (
                     f"Expected authentication rejection, got HTTP {response.status_code}"
                 )
@@ -108,7 +111,6 @@ def test_authorino_authentication_alert_fires(
                         assert monotonic() - started >= 300, "Alert fired before its five-minute hold duration"
                         break
                     next_poll = monotonic() + POLL_SECONDS
-                sleep(2)
         assert pending_seen, "Never observed the shipped alert pending"
         assert firing_seen, "Alert did not fire within the hold window plus evaluation/scrape allowance"
         failures_after = query_alert_metrics(prometheus=prometheus, query=failures_query)
@@ -118,17 +120,18 @@ def test_authorino_authentication_alert_fires(
     finally:
         # No worker remains running on assertion failure; allow the five-minute rate window to drain.
         if traffic_started:
-            for _ in range(RECOVERY_TIMEOUT_SECONDS // POLL_SECONDS):
-                failure_rate = query_alert_metrics(
-                    prometheus=prometheus,
-                    query=f"sum(rate({failures_selector}[5m]))",
-                )
+            for failure_rate in TimeoutSampler(
+                wait_timeout=RECOVERY_TIMEOUT_SECONDS,
+                sleep=POLL_SECONDS,
+                func=query_alert_metrics,
+                exceptions_dict={},
+                print_func_args=False,
+                prometheus=prometheus,
+                query=f"sum(rate({failures_selector}[5m]))",
+            ):
                 alerts = query_alert_metrics(prometheus=prometheus, query=alert_query)
                 target_up = query_alert_metrics(prometheus=prometheus, query=target_up_query)
                 assert target_up and target_up[0]["value"][1] == "1", "Authorino scrape target failed during recovery"
-                if failure_rate and all(float(sample["value"][1]) <= 0 for sample in failure_rate) and not alerts:
+                if not alerts and all(float(sample["value"][1]) <= 0 for sample in failure_rate):
                     LOGGER.info("Authorino failure traffic stopped and alert cleared")
                     break
-                sleep(POLL_SECONDS)
-            else:
-                pytest.fail("Authorino authentication alert/metrics did not recover after failure traffic stopped")

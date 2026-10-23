@@ -21,6 +21,8 @@ def query_alert_metrics(prometheus: Prometheus, query: str) -> list[dict[str, An
     Returns:
         Instant-vector samples, including an empty vector for an inactive alert.
     """
+    # query_sampler discards response warnings and cannot set partial_response=false.
+    # Empty successful vectors are valid for inactive alerts; partial data is not.
     response = requests.get(
         url=f"{prometheus.api_url}/api/v1/query",
         headers=prometheus.headers,

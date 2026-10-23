@@ -132,8 +132,7 @@ Coverage reflects the tests on this branch; individual checks are documented in 
 
 ## Authorino alert firing (dedicated monitoring job)
 
-`observability/test_authorino_alerts.py` covers RHOAIENG-99399. It is opt-in and
-is not part of the default MaaS PR smoke selection. Run it serially on a dedicated
+`observability/test_authorino_alerts.py` covers RHOAIENG-99399. It is not part of the default MaaS PR smoke selection. Run it serially on a dedicated
 test cluster: the shipped rule aggregates traffic in the Authorino namespace,
 not individual model namespaces.
 
@@ -146,7 +145,6 @@ It does not install monitoring, modify alert thresholds, or provision a model.
 The runner owns teardown of those prerequisites.
 
 ```bash
-export MAAS_RUN_AUTHORINO_ALERT_TEST=true
 export MAAS_AUTHORINO_ALERT_MODEL_URL='https://<gateway>/llm/<test-model>/v1/chat/completions'
 uv run pytest -v -s tests/ai_gateway/models_as_a_service/observability/test_authorino_alerts.py
 ```
@@ -157,5 +155,5 @@ an inactive baseline, generates bounded failure traffic, observes pending and
 firing states, and checks that Authorino's `UNAUTHENTICATED` counter increases.
 It always stops traffic and waits for the rate window and alert to recover,
 including after an assertion failure. Allow approximately 15–20 minutes including
-cluster fixture setup. A missing rule or metrics stream fails the opted-in run.
+cluster fixture setup. A missing rule or metrics stream fails the run.
 This test checks alert evaluation, not delivery to an external paging receiver.

@@ -136,13 +136,24 @@ Coverage reflects the tests on this branch; individual checks are documented in 
 test cluster: the shipped rule aggregates traffic in the Authorino namespace,
 not individual model namespaces.
 
-The runner must provision a protected model endpoint in a test namespace and
-install the release's `authorino-maas-authentication-alerts` PrometheusRule and
-Authorino `/server-metrics` ServiceMonitor. OpenShift user-workload monitoring
-and its Alertmanager connection must be configured. The test queries the existing
-cluster `thanos-querier` route using the repository's `prometheus` fixture.
-It does not install monitoring, modify alert thresholds, or provision a model.
-The runner owns teardown of those prerequisites.
+The runner must enable DSCI-managed metrics and alerting, provision a protected
+model endpoint in a test namespace, and install the product-compatible
+`authorino-maas-authentication-alerts` PrometheusRule (`monitoring.rhobs/v1`)
+in the monitoring namespace. Authorino's `/server-metrics` ServiceMonitor must
+be selected by the product OTEL collector (`monitoring.opendatahub.io/scrape: "true"`).
+The rule must use the OTEL-normalized `auth_server_authconfig_response_status_total`
+counter and retain its five-minute hold duration.
+
+The test queries product Thanos through a temporary loopback Kubernetes
+port-forward, using the runner's cluster credentials. This preserves visibility
+of aggregated alerts that have no namespace label; the namespace-filtered route
+would hide those alerts. The runner needs port-forward access in the monitoring
+namespace. There is no fallback to UWM. The test does not install monitoring,
+modify alert thresholds, or provision a model. The runner owns those prerequisites.
+
+Product integration of these Authorino rules is pending. Running against a
+manually adapted rule validates that integration experiment, not the unchanged
+shipped UWM rule. Record which rule configuration was used with validation results.
 
 ```bash
 export MAAS_AUTHORINO_ALERT_MODEL_URL='https://<gateway>/llm/<test-model>/v1/chat/completions'

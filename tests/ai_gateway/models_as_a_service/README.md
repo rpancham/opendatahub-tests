@@ -136,35 +136,35 @@ Coverage reflects the tests on this branch; individual checks are documented in 
 test cluster: the shipped rule aggregates traffic in the Authorino namespace,
 not individual model namespaces.
 
-The runner must enable DSCI-managed metrics and alerting, provision a protected
-model endpoint in a test namespace, and install the product-compatible
-`authorino-maas-authentication-alerts` PrometheusRule (`monitoring.rhobs/v1`)
-in the monitoring namespace. Authorino's `/server-metrics` ServiceMonitor must
-be selected by the product OTEL collector (`monitoring.opendatahub.io/scrape: "true"`).
-The rule must use the OTEL-normalized `auth_server_authconfig_response_status_total`
-counter and retain its five-minute hold duration.
+The cluster must have MaaS, its HTTPS gateway, Authorino, KServe, and the DSCI
+monitoring dependencies installed. Use a maas-controller build that deploys
+Authorino monitoring resources (models-as-a-service PR #1769), with
+`Config.spec.authorinoMonitoring` enabled (the default). The test waits for the
+controller-managed ServiceMonitor and `monitoring.rhobs/v1` authentication rule;
+it does not install substitute rules or change their thresholds.
+
+Function-scoped fixtures enable DSCI metrics and alerting, wait for the monitoring
+stack and Authorino scraping, and deploy a CPU-only simulator in a temporary
+namespace behind the MaaS gateway. No external model URL, GPU, model download,
+or storage credentials are needed. Teardown deletes the simulator and namespace
+and restores the previous DSCI metrics/alerting settings, including when setup
+or the test fails.
 
 The test queries product Thanos through a temporary loopback Kubernetes
-port-forward, using the runner's cluster credentials. This preserves visibility
-of aggregated alerts that have no namespace label; the namespace-filtered route
-would hide those alerts. The runner needs port-forward access in the monitoring
-namespace. There is no fallback to UWM. The test does not install monitoring,
-modify alert thresholds, or provision a model. The runner owns those prerequisites.
-
-Product integration of these Authorino rules is pending. Running against a
-manually adapted rule validates that integration experiment, not the unchanged
-shipped UWM rule. Record which rule configuration was used with validation results.
+port-forward using the runner's cluster credentials. This preserves visibility
+of aggregated alerts without namespace labels. The runner needs permission to
+patch DSCI, create the model and namespace, and port-forward in the monitoring
+namespace. There is no fallback to UWM.
 
 ```bash
-export MAAS_AUTHORINO_ALERT_MODEL_URL='https://<gateway>/llm/<test-model>/v1/chat/completions'
 uv run pytest -v -s tests/ai_gateway/models_as_a_service/observability/test_authorino_alerts.py
 ```
 
-The URL must accept unauthenticated POST requests and reject them at Authorino
-with HTTP 401; do not include credentials or query parameters. The test verifies
-an inactive baseline, generates bounded failure traffic, observes pending and
-firing states, and checks that Authorino's `UNAUTHENTICATED` counter increases.
-It always stops traffic and waits for the rate window and alert to recover,
-including after an assertion failure. Allow approximately 15–20 minutes including
-cluster fixture setup. A missing rule or metrics stream fails the run.
+The test verifies an inactive baseline, generates bounded unauthenticated traffic
+to its simulator, requires HTTP 401 responses, observes pending and firing,
+and checks that Authorino's `UNAUTHENTICATED` counter increases. It stops traffic
+and waits for recovery, including after an assertion failure. Transient connection
+errors and timeouts are retried within the existing deadlines; TLS certificate
+failures are not retried. Allow approximately 15–20 minutes plus initial monitoring
+and model provisioning. Missing controller-managed rules or metrics fail the run.
 This test checks alert evaluation, not delivery to an external paging receiver.

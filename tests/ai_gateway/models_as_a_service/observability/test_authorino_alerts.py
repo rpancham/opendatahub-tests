@@ -31,7 +31,9 @@ RECOVERY_TIMEOUT_SECONDS = 420
 
 
 @pytest.fixture
-def authorino_product_prometheus(admin_client: DynamicClient) -> Generator[AuthorinoMetricsClient]:
+def authorino_product_prometheus(
+    admin_client: DynamicClient, kubconfig_filepath: str
+) -> Generator[AuthorinoMetricsClient]:
     """Connect to product Thanos without filtering out namespace-less aggregated alerts."""
     namespace = resolve_maas_monitoring_namespace(admin_client=admin_client)
     assert namespace, "DSCI monitoring namespace is not configured"
@@ -46,6 +48,7 @@ def authorino_product_prometheus(admin_client: DynamicClient) -> Generator[Autho
         pod_or_service=service.name,
         from_port=0,
         to_port=10902,
+        config_path=kubconfig_filepath,
         bind_ip="127.0.0.1",
         waiting=2,
     ) as forwarder:
@@ -131,8 +134,7 @@ def test_authorino_authentication_alert_fires(
                 wait_timeout=FIRING_TIMEOUT_SECONDS,
                 sleep=2,
                 func=session.post,
-                exceptions_dict={},
-                print_func_args=False,
+                exceptions_dict={requests.exceptions.ConnectionError: [], requests.exceptions.Timeout: []},
                 url=target_url,
                 json={"messages": [{"role": "user", "content": "alert test"}], "max_tokens": 1},
                 timeout=10,
@@ -143,7 +145,11 @@ def test_authorino_authentication_alert_fires(
                 )
                 request_count += 1
                 if monotonic() >= next_poll:
-                    samples = query_alert_metrics(prometheus=prometheus, query=alert_query)
+                    try:
+                        samples = query_alert_metrics(prometheus=prometheus, query=alert_query)
+                    except requests.exceptions.ConnectionError, requests.exceptions.Timeout:
+                        # Retry on the next iteration within the existing firing deadline.
+                        continue
                     states = {sample["metric"]["alertstate"] for sample in samples}
                     pending_seen |= "pending" in states
                     LOGGER.info(
@@ -170,13 +176,16 @@ def test_authorino_authentication_alert_fires(
                 wait_timeout=RECOVERY_TIMEOUT_SECONDS,
                 sleep=POLL_SECONDS,
                 func=query_alert_metrics,
-                exceptions_dict={},
-                print_func_args=False,
+                exceptions_dict={requests.exceptions.ConnectionError: [], requests.exceptions.Timeout: []},
                 prometheus=prometheus,
                 query=f"sum(rate({failures_selector}[5m]))",
             ):
-                alerts = query_alert_metrics(prometheus=prometheus, query=alert_query)
-                target_up = query_alert_metrics(prometheus=prometheus, query=target_up_query)
+                try:
+                    alerts = query_alert_metrics(prometheus=prometheus, query=alert_query)
+                    target_up = query_alert_metrics(prometheus=prometheus, query=target_up_query)
+                except requests.exceptions.ConnectionError, requests.exceptions.Timeout:
+                    # The sampler also bounds retries for queries made after it yields.
+                    continue
                 assert target_up and target_up[0]["value"][1] == "1", "Authorino scrape target failed during recovery"
                 if not alerts and all(float(sample["value"][1]) <= 0 for sample in failure_rate):
                     LOGGER.info("Authorino failure traffic stopped and alert cleared")
